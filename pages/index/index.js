@@ -6,7 +6,13 @@ Page({
     phoneDisplay: '',
     coupons: [],
     activeCoupons: [],
-    qrReady: false
+    qrReady: false,
+    couponOptions: [
+      { id: 'discount200', title: '200元优惠券', faceValue: 200, category: '通用', tip: '日常消费通用' },
+      { id: 'oil500', title: '500元油卡券', faceValue: 500, category: '油卡', tip: '加油充值专享' },
+      { id: 'service300', title: '300元保养券', faceValue: 300, category: '保养', tip: '汽车保养抵扣' }
+    ],
+    selectedCouponId: 'discount200'
   },
 
   onLoad() {
@@ -44,41 +50,48 @@ Page({
     app.globalData.coupons = storedCoupons;
   },
 
+  onSelectCoupon(e) {
+    this.setData({ selectedCouponId: e.detail.value });
+  },
+
   generateCoupon() {
     if (!app.globalData.userPhone) {
       wx.showToast({ title: '请先登录', icon: 'none' });
       wx.reLaunch({ url: '/pages/login/index' });
       return;
     }
+    const preset = this.data.couponOptions.find(item => item.id === this.data.selectedCouponId);
+    if (!preset) {
+      wx.showToast({ title: '请选择要生成的优惠券', icon: 'none' });
+      return;
+    }
+
     const timestamp = Date.now();
     const createdAt = this.formatTime(new Date());
-    const presets = [
-      { title: '200元优惠券', faceValue: 200, category: '通用' },
-      { title: '500元油卡券', faceValue: 500, category: '油卡' },
-      { title: '300元保养券', faceValue: 300, category: '保养' }
-    ];
-
-    const newCoupons = presets.map((preset, index) => ({
-      id: `${timestamp}-${index}`,
-      code: `HX-${preset.faceValue}-${timestamp + index}`,
+    const newCoupon = {
+      id: `${preset.id}-${timestamp}`,
+      code: `HX-${preset.faceValue}-${timestamp}`,
       title: preset.title,
       faceValue: preset.faceValue,
       category: preset.category,
       status: 'active',
       createdAt
-    }));
+    };
 
     const existingCoupons = wx.getStorageSync('coupons') || [];
-    const coupons = [...newCoupons, ...existingCoupons];
+    const coupons = [newCoupon, ...existingCoupons];
+    const active = coupons.filter(item => item.status === 'active');
     app.globalData.coupons = coupons;
     wx.setStorageSync('coupons', coupons);
 
     this.setData({
       coupons: coupons.map(coupon => this.decorateCoupon(coupon)),
-      activeCoupons: newCoupons.map(coupon => this.decorateCoupon(coupon)),
-      qrReady: true
+      activeCoupons: active.map(coupon => this.decorateCoupon(coupon)),
+      qrReady: active.length > 0
     }, () => {
-      this.drawQrBatch(newCoupons);
+      if (active.length > 0) {
+        this.drawQrBatch(active);
+      }
     });
   },
 

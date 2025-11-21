@@ -5,9 +5,20 @@
   </view>
 
   <view class="section">
-    <view class="section-title">生成优惠券 <text class="badge">三张固定面额</text></view>
-    <view class="info-text">一键生成 200 元、500 元油卡、300 元保养三张核销券并展示二维码。</view>
-    <button class="primary-btn" bindtap="generateCoupon">生成三张核销券二维码</button>
+    <view class="section-title">生成优惠券 <text class="badge">可选择券种</text></view>
+    <view class="info-text">请选择一种优惠券类型生成二维码，可重复生成不同券。</view>
+    <radio-group class="coupon-options" bindchange="onSelectCoupon">
+      <block wx:for="{{couponOptions}}" wx:key="id">
+        <label class="option-card" for="{{item.id}}">
+          <radio id="{{item.id}}" value="{{item.id}}" checked="{{item.id === selectedCouponId}}" color="#39b54a" />
+          <view class="option-content">
+            <view class="option-title">{{item.title}}</view>
+            <view class="info-text">{{item.tip}}</view>
+          </view>
+        </label>
+      </block>
+    </radio-group>
+    <button class="primary-btn" bindtap="generateCoupon">生成所选优惠券二维码</button>
     <view class="qr-wrapper" style="margin-top:24rpx;" wx:if="qrReady">
       <view class="qr-grid">
         <block wx:for="{{activeCoupons}}" wx:key="id">

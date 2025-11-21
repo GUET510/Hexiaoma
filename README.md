@@ -12,3 +12,18 @@
 1. 使用微信开发者工具导入本项目目录。
 2. 允许自定义编译型 2D Canvas（在开发者工具基础库 2.13.0 及以上可用）。
 3. 预览/真机运行后体验生成和核销流程。
+
+## 绑定 GitHub 仓库
+如需将本仓库与个人 GitHub 仓库绑定并推送代码，可在当前目录执行：
+1. 添加远端（将 `<your-repo-url>` 替换为实际地址）：
+   ```bash
+   git remote add origin <your-repo-url>
+   ```
+2. 验证远端是否配置成功：
+   ```bash
+   git remote -v
+   ```
+3. 推送当前分支（默认分支名请根据远端仓库调整）：
+   ```bash
+   git push -u origin work
+   ```

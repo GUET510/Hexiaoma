@@ -1,6 +1,8 @@
 {
   "pages": [
-    "pages/index/index"
+    "pages/login/index",
+    "pages/index/index",
+    "pages/verify/index"
   ],
   "window": {
     "navigationBarTitleText": "优惠券核销",

@@ -72,6 +72,39 @@ page {
   text-align: center;
 }
 
+.qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240rpx, 1fr));
+  gap: 20rpx;
+  width: 100%;
+}
+
+.qr-card {
+  background: #f8fafc;
+  border: 2rpx solid #e6ecf2;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.coupon-title {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.coupon-amount {
+  font-size: 24rpx;
+  color: #2f5af5;
+}
+
+.qr-canvas {
+  width: 240rpx;
+  height: 240rpx;
+}
+
 .coupon-card {
   display: flex;
   justify-content: space-between;

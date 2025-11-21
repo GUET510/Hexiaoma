@@ -5,14 +5,22 @@
   </view>
 
   <view class="section">
-    <view class="section-title">生成优惠券 <text class="badge">生成二维码</text></view>
-    <view class="info-text">点击按钮生成新的优惠券核销码并展示二维码。</view>
-    <button class="primary-btn" bindtap="generateCoupon">生成优惠券二维码</button>
-    <view class="qr-wrapper" style="margin-top:24rpx;">
-      <canvas wx:if="qrReady" id="couponQr" type="2d" canvas-id="couponQr" style="width:300rpx;height:300rpx;"></canvas>
-      <view wx:else class="qr-tip">二维码生成后会展示在这里</view>
+    <view class="section-title">生成优惠券 <text class="badge">三张固定面额</text></view>
+    <view class="info-text">一键生成 200 元、500 元油卡、300 元保养三张核销券并展示二维码。</view>
+    <button class="primary-btn" bindtap="generateCoupon">生成三张核销券二维码</button>
+    <view class="qr-wrapper" style="margin-top:24rpx;" wx:if="qrReady">
+      <view class="qr-grid">
+        <block wx:for="{{activeCoupons}}" wx:key="id">
+          <view class="qr-card">
+            <view class="coupon-title">{{item.title}}</view>
+            <view class="coupon-amount">核销码：{{item.code}}</view>
+            <canvas class="qr-canvas" id="qr-{{item.id}}" type="2d" canvas-id="qr-{{item.id}}"></canvas>
+            <view class="info-text">状态：{{item.statusLabel}}</view>
+          </view>
+        </block>
+      </view>
     </view>
-    <view wx:if="currentCoupon" class="info-text" style="margin-top:12rpx;">当前优惠券：{{currentCoupon.code}}（{{currentCoupon.statusLabel}}）</view>
+    <view wx:else class="qr-tip">二维码生成后会展示在这里</view>
   </view>
 
   <view class="section">
@@ -21,7 +29,7 @@
     <block wx:for="{{coupons}}" wx:key="id">
       <view class="coupon-card">
         <view>
-          <view>{{item.code}}</view>
+          <view>{{item.title || '优惠券'}} · {{item.code}}</view>
           <view class="coupon-status {{item.status === 'used' ? 'used' : ''}}">{{item.status === 'used' ? '已核销' : '未核销'}}</view>
         </view>
         <view class="tag">{{item.createdAt}}</view>

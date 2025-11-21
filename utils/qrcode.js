@@ -299,7 +299,7 @@
   };
 
   function generateMatrix(text) {
-    var qr = new QRCode(4, QRErrorCorrectLevel.M);
+    var qr = new QRCode(-1, QRErrorCorrectLevel.H);
     qr.addData(text);
     qr.make();
     return qr;
@@ -307,7 +307,9 @@
 
   function drawCanvas(qr, canvasId, size, context) {
     var count = qr.getModuleCount();
-    var tile = size / count;
+    var margin = Math.max(8, Math.floor(size * 0.05));
+    var drawSize = size - margin * 2;
+    var tile = drawSize / count;
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, size, size);
     context.fillStyle = '#000000';
@@ -316,7 +318,7 @@
         if (qr.isDark(r, c)) {
           var w = Math.ceil((c + 1) * tile) - Math.floor(c * tile);
           var h = Math.ceil((r + 1) * tile) - Math.floor(r * tile);
-          context.fillRect(Math.round(c * tile), Math.round(r * tile), w, h);
+          context.fillRect(Math.round(margin + c * tile), Math.round(margin + r * tile), w, h);
         }
       }
     }

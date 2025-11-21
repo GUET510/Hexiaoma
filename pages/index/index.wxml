@@ -36,16 +36,18 @@
 
   <view class="section">
     <view class="section-title">优惠券列表 <text class="badge">本地示例</text></view>
-    <view wx:if="coupons.length === 0" class="info-text">暂无优惠券，点击上方按钮生成。</view>
-    <block wx:for="{{coupons}}" wx:key="id">
-      <view class="coupon-card">
-        <view>
-          <view>{{item.title || '优惠券'}} · {{item.code}}</view>
-          <view class="coupon-status {{item.status === 'used' ? 'used' : ''}}">{{item.status === 'used' ? '已核销' : '未核销'}}</view>
+    <block wx:if="{{coupons && coupons.length}}">
+      <block wx:for="{{coupons}}" wx:key="id">
+        <view class="coupon-card">
+          <view>
+            <view>{{item.title || '优惠券'}} · {{item.code}}</view>
+            <view class="coupon-status {{item.status === 'used' ? 'used' : ''}}">{{item.status === 'used' ? '已核销' : '未核销'}}</view>
+          </view>
+          <view class="tag">{{item.createdAt}}</view>
         </view>
-        <view class="tag">{{item.createdAt}}</view>
-      </view>
+      </block>
     </block>
+    <view wx:else class="info-text">暂无优惠券，点击上方按钮生成。</view>
   </view>
 
   <view class="section">

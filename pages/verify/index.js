@@ -49,16 +49,17 @@ Page({
   },
 
   verifyManual() {
-    this.verifyCoupon(this.data.scanInput.trim());
+    this.verifyCoupon(this.data.scanInput);
   },
 
   verifyCoupon(code) {
-    if (!code) {
+    const normalized = (code || '').trim();
+    if (!normalized) {
       wx.showToast({ title: '请输入核销码', icon: 'none' });
       return;
     }
     const coupons = [...this.data.coupons];
-    const target = coupons.find(item => item.code === code);
+    const target = coupons.find(item => item.code === normalized);
     if (!target) {
       this.setData({ verifyMessage: '未找到该核销码，请确认后再试' });
       return;

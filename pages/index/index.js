@@ -100,21 +100,29 @@ Page({
   },
 
   drawQrBatch(coupons) {
-    const query = wx.createSelectorQuery();
-    const size = 260;
-    coupons.forEach((coupon) => {
-      query.select(`#qr-${coupon.id}`).fields({ node: true, size: true });
-    });
+    // 确保页面渲染完成后再选择 canvas，否则节点可能为空导致不绘制
+    wx.nextTick(() => {
+      const query = this.createSelectorQuery();
+      const size = 260;
+      coupons.forEach((coupon) => {
+        query.select(`#qr-${coupon.id}`).fields({ node: true, size: true });
+      });
 
-    query.exec((res) => {
-      if (!res) return;
-      res.forEach((item, index) => {
-        if (!item || !item.node) return;
-        const canvas = item.node;
-        canvas.width = size;
-        canvas.height = size;
-        const coupon = coupons[index];
-        makeQrToCanvas(coupon.code, { canvasId: `qr-${coupon.id}`, size, ctx: canvas.getContext('2d') });
+      query.exec((res) => {
+        if (!res || !res.length) {
+          console.warn('未获取到二维码节点');
+          return;
+        }
+        res.forEach((item, index) => {
+          if (!item || !item.node) return;
+          const canvas = item.node;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          canvas.width = size;
+          canvas.height = size;
+          const coupon = coupons[index];
+          makeQrToCanvas(coupon.code, { canvasId: `qr-${coupon.id}`, size, ctx });
+        });
       });
     });
   },

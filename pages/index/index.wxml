@@ -25,7 +25,10 @@
           <view class="qr-card">
             <view class="coupon-title">{{item.title}}</view>
             <view class="coupon-amount">核销码：{{item.code}}</view>
-            <canvas class="qr-canvas" id="qr-{{item.id}}" type="2d" canvas-id="qr-{{item.id}}"></canvas>
+            <view class="qr-visual">
+              <image wx:if="{{item.qrImage}}" class="qr-img" mode="aspectFit" src="{{item.qrImage}}" />
+              <canvas wx:else class="qr-canvas" id="qr-{{item.id}}" type="2d" canvas-id="qr-{{item.id}}"></canvas>
+            </view>
             <view class="info-text">状态：{{item.statusLabel}}</view>
           </view>
         </block>

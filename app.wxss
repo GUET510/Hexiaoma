@@ -90,6 +90,14 @@ page {
   gap: 8rpx;
 }
 
+.qr-visual {
+  width: 240rpx;
+  height: 240rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .coupon-title {
   font-size: 28rpx;
   font-weight: 600;
@@ -103,6 +111,12 @@ page {
 .qr-canvas {
   width: 240rpx;
   height: 240rpx;
+}
+
+.qr-img {
+  width: 240rpx;
+  height: 240rpx;
+  border-radius: 8rpx;
 }
 
 .coupon-card {

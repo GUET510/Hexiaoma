@@ -1,0 +1,15 @@
+<view class="page">
+  <view class="section">
+    <view class="section-title">扫码核销</view>
+    <view class="info-text">使用微信扫一扫核销优惠券。</view>
+    <button class="primary-btn" bindtap="scanCoupon">扫一扫核销</button>
+  </view>
+
+  <view class="section">
+    <view class="section-title">手动核销</view>
+    <view class="info-text">输入或粘贴核销码完成核销。</view>
+    <input class="ghost-btn" style="margin-top:12rpx;padding-left:16rpx;" placeholder="输入优惠券核销码" value="{{scanInput}}" bindinput="onScanInput"/>
+    <button class="ghost-btn" style="margin-top:12rpx;" bindtap="verifyManual">手动核销</button>
+    <view wx:if="verifyMessage" class="info-text" style="margin-top:12rpx;">{{verifyMessage}}</view>
+  </view>
+</view>

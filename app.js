@@ -1,6 +1,8 @@
 App({
   globalData: {
     userPhone: '',
-    coupons: []
+    customerId: '',
+    coupons: [],
+    apiBaseUrl: 'http://localhost:3000'
   }
 })

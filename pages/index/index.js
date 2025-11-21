@@ -27,27 +27,42 @@ Page({
 
   ensureLogin() {
     const storedPhone = wx.getStorageSync('userPhone');
-    if (!storedPhone) {
+    const storedCustomerId = wx.getStorageSync('customerId');
+    if (!storedPhone || !storedCustomerId) {
       wx.reLaunch({ url: '/pages/login/index' });
       return;
     }
     this.setData({ phoneDisplay: storedPhone });
     app.globalData.userPhone = storedPhone;
+    app.globalData.customerId = storedCustomerId;
   },
 
   syncCoupons() {
-    const storedCoupons = wx.getStorageSync('coupons') || [];
-    const active = storedCoupons.filter(item => item.status === 'active');
-    this.setData({
-      coupons: storedCoupons.map(coupon => this.decorateCoupon(coupon)),
-      activeCoupons: active.map(coupon => this.decorateCoupon(coupon)),
-      qrReady: active.length > 0
-    }, () => {
-      if (active.length > 0) {
-        this.drawQrBatch(active);
+    const customerId = app.globalData.customerId || wx.getStorageSync('customerId');
+    if (!customerId) return;
+    wx.request({
+      url: `${app.globalData.apiBaseUrl}/api/coupons`,
+      method: 'GET',
+      data: { customerId },
+      success: (res) => {
+        const coupons = (res.data && res.data.coupons) || [];
+        const active = coupons.filter(item => item.status === 'active');
+        this.setData({
+          coupons: coupons.map(coupon => this.decorateCoupon(coupon)),
+          activeCoupons: active.map(coupon => this.decorateCoupon(coupon)),
+          qrReady: active.length > 0
+        }, () => {
+          if (active.length > 0) {
+            this.drawQrBatch(active);
+          }
+        });
+        wx.setStorageSync('coupons', coupons);
+        app.globalData.coupons = coupons;
+      },
+      fail: () => {
+        wx.showToast({ title: '获取优惠券失败，请检查后端服务', icon: 'none' });
       }
     });
-    app.globalData.coupons = storedCoupons;
   },
 
   onSelectCoupon(e) {
@@ -55,7 +70,7 @@ Page({
   },
 
   generateCoupon() {
-    if (!app.globalData.userPhone) {
+    if (!app.globalData.userPhone || !app.globalData.customerId) {
       wx.showToast({ title: '请先登录', icon: 'none' });
       wx.reLaunch({ url: '/pages/login/index' });
       return;
@@ -66,31 +81,19 @@ Page({
       return;
     }
 
-    const timestamp = Date.now();
-    const createdAt = this.formatTime(new Date());
-    const newCoupon = {
-      id: `${preset.id}-${timestamp}`,
-      code: `HX-${preset.faceValue}-${timestamp}`,
-      title: preset.title,
-      faceValue: preset.faceValue,
-      category: preset.category,
-      status: 'active',
-      createdAt
-    };
-
-    const existingCoupons = wx.getStorageSync('coupons') || [];
-    const coupons = [newCoupon, ...existingCoupons];
-    const active = coupons.filter(item => item.status === 'active');
-    app.globalData.coupons = coupons;
-    wx.setStorageSync('coupons', coupons);
-
-    this.setData({
-      coupons: coupons.map(coupon => this.decorateCoupon(coupon)),
-      activeCoupons: active.map(coupon => this.decorateCoupon(coupon)),
-      qrReady: active.length > 0
-    }, () => {
-      if (active.length > 0) {
-        this.drawQrBatch(active);
+    wx.request({
+      url: `${app.globalData.apiBaseUrl}/api/coupons`,
+      method: 'POST',
+      data: {
+        customerId: app.globalData.customerId,
+        templateId: preset.id
+      },
+      success: () => {
+        wx.showToast({ title: '生成成功', icon: 'success' });
+        this.syncCoupons();
+      },
+      fail: () => {
+        wx.showToast({ title: '生成失败，请检查后端服务', icon: 'none' });
       }
     });
   },
@@ -159,10 +162,5 @@ Page({
       ...coupon,
       statusLabel: coupon.status === 'used' ? '已核销' : '未核销'
     };
-  },
-
-  formatTime(date) {
-    const pad = (n) => (n < 10 ? `0${n}` : n);
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 });

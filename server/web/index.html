@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hexiaoma 后台</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 24px; background: #f7f7f7; }
+    h1 { margin-bottom: 12px; }
+    .card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin-bottom: 16px; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; }
+    input, select, button { padding: 10px 12px; border: 1px solid #dcdfe6; border-radius: 8px; font-size: 14px; }
+    button { cursor: pointer; background: #07c160; color: #fff; border: none; }
+    button.secondary { background: #fff; color: #333; border: 1px solid #07c160; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #eee; }
+    .status-used { color: #f56c6c; }
+    .status-active { color: #07c160; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .small { font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>核销券后台演示</h1>
+  <div class="card">
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+      <div>
+        <label>客户ID</label>
+        <input id="customerId" placeholder="输入登录返回的 customerId" />
+      </div>
+      <div>
+        <label>券模板</label>
+        <select id="templateId">
+          <option value="discount200">200元优惠券</option>
+          <option value="oil500">500元油卡券</option>
+          <option value="service300">300元保养券</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button onclick="generate()">生成优惠券</button>
+        <button class="secondary" onclick="refreshList()">刷新列表</button>
+      </div>
+    </div>
+    <p class="small">启动服务后，登录小程序会返回 customerId；在这里输入即可查看、生成优惠券。</p>
+  </div>
+
+  <div class="card">
+    <h3>优惠券列表</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>券名称</th>
+          <th>核销码</th>
+          <th>状态</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="list"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const apiBase = '';
+
+    function renderRows(items) {
+      const tbody = document.getElementById('list');
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="6">暂无数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map(item => `
+        <tr>
+          <td>${item.id}</td>
+          <td>${item.title}</td>
+          <td>${item.code}</td>
+          <td class="${item.status === 'used' ? 'status-used' : 'status-active'}">${item.statusLabel}</td>
+          <td>${item.createdAt || ''}</td>
+          <td><button class="secondary" onclick="verify('${item.code}')">核销</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function refreshList() {
+      const customerId = document.getElementById('customerId').value.trim();
+      if (!customerId) return alert('请先填写 customerId');
+      fetch(`${apiBase}/api/coupons?customerId=${customerId}`)
+        .then(r => r.json())
+        .then(data => renderRows(data.coupons || []))
+        .catch(() => alert('获取列表失败'));
+    }
+
+    function generate() {
+      const customerId = document.getElementById('customerId').value.trim();
+      const templateId = document.getElementById('templateId').value;
+      if (!customerId) return alert('请先填写 customerId');
+      fetch(`${apiBase}/api/coupons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId, templateId })
+      }).then(r => r.json())
+        .then(() => refreshList())
+        .catch(() => alert('生成失败'));
+    }
+
+    function verify(code) {
+      const customerId = document.getElementById('customerId').value.trim();
+      if (!customerId) return alert('请先填写 customerId');
+      fetch(`${apiBase}/api/coupons/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId, code })
+      }).then(r => r.json())
+        .then((res) => {
+          alert(res.success ? '核销成功' : (res.message || '核销失败'));
+          refreshList();
+        })
+        .catch(() => alert('核销失败'));
+    }
+  </script>
+</body>
+</html>

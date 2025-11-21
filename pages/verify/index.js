@@ -19,17 +19,28 @@ Page({
 
   ensureLogin() {
     const storedPhone = wx.getStorageSync('userPhone');
-    if (!storedPhone) {
+    const storedCustomerId = wx.getStorageSync('customerId');
+    if (!storedPhone || !storedCustomerId) {
       wx.reLaunch({ url: '/pages/login/index' });
     } else {
       app.globalData.userPhone = storedPhone;
+      app.globalData.customerId = storedCustomerId;
     }
   },
 
   syncCoupons() {
-    const storedCoupons = wx.getStorageSync('coupons') || [];
-    this.setData({ coupons: storedCoupons });
-    app.globalData.coupons = storedCoupons;
+    const customerId = app.globalData.customerId || wx.getStorageSync('customerId');
+    if (!customerId) return;
+    wx.request({
+      url: `${app.globalData.apiBaseUrl}/api/coupons`,
+      method: 'GET',
+      data: { customerId },
+      success: (res) => {
+        const coupons = (res.data && res.data.coupons) || [];
+        this.setData({ coupons });
+        app.globalData.coupons = coupons;
+      }
+    });
   },
 
   scanCoupon() {
@@ -58,19 +69,23 @@ Page({
       wx.showToast({ title: '请输入核销码', icon: 'none' });
       return;
     }
-    const coupons = [...this.data.coupons];
-    const target = coupons.find(item => item.code === normalized);
-    if (!target) {
-      this.setData({ verifyMessage: '未找到该核销码，请确认后再试' });
-      return;
-    }
-    if (target.status === 'used') {
-      this.setData({ verifyMessage: '该优惠券已核销' });
-      return;
-    }
-    target.status = 'used';
-    this.setData({ coupons, verifyMessage: '核销成功' });
-    app.globalData.coupons = coupons;
-    wx.setStorageSync('coupons', coupons);
+    const customerId = app.globalData.customerId;
+    wx.request({
+      url: `${app.globalData.apiBaseUrl}/api/coupons/verify`,
+      method: 'POST',
+      data: { customerId, code: normalized },
+      success: (res) => {
+        if (res.data && res.data.success) {
+          wx.showToast({ title: '核销成功', icon: 'success' });
+          this.setData({ verifyMessage: '核销成功', scanInput: '' });
+          this.syncCoupons();
+        } else {
+          this.setData({ verifyMessage: res.data && res.data.message ? res.data.message : '核销失败' });
+        }
+      },
+      fail: () => {
+        wx.showToast({ title: '网络异常，稍后再试', icon: 'none' });
+      }
+    });
   }
 });

@@ -1,0 +1,42 @@
+<view class="page">
+  <view class="section">
+    <view class="section-title">手机号授权 <text class="badge">必需</text></view>
+    <view class="info-text">授权后自动完成登录，便于生成与核销优惠券。</view>
+    <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" wx:if="!loggedIn">手机号授权登录</button>
+    <view wx:elif="loggedIn" class="info-text">已登录：{{phoneDisplay}}</view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">生成优惠券 <text class="badge">生成二维码</text></view>
+    <view class="info-text">点击按钮生成新的优惠券核销码并展示二维码。</view>
+    <button class="primary-btn" bindtap="generateCoupon">生成优惠券二维码</button>
+    <view class="qr-wrapper" style="margin-top:24rpx;">
+      <canvas wx:if="qrReady" id="couponQr" type="2d" canvas-id="couponQr" style="width:300rpx;height:300rpx;"></canvas>
+      <view wx:else class="qr-tip">二维码生成后会展示在这里</view>
+    </view>
+    <view wx:if="currentCoupon" class="info-text" style="margin-top:12rpx;">当前优惠券：{{currentCoupon.code}}（{{currentCoupon.statusLabel}}）</view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">优惠券列表 <text class="badge">本地示例</text></view>
+    <view wx:if="coupons.length === 0" class="info-text">暂无优惠券，点击上方按钮生成。</view>
+    <block wx:for="{{coupons}}" wx:key="id">
+      <view class="coupon-card">
+        <view>
+          <view>{{item.code}}</view>
+          <view class="coupon-status {{item.status === 'used' ? 'used' : ''}}">{{item.status === 'used' ? '已核销' : '未核销'}}</view>
+        </view>
+        <view class="tag">{{item.createdAt}}</view>
+      </view>
+    </block>
+  </view>
+
+  <view class="section">
+    <view class="section-title">核销 <text class="badge">扫码或手动</text></view>
+    <view class="info-text">可使用微信扫码核销或手动输入核销码。</view>
+    <button class="primary-btn" bindtap="scanCoupon">扫一扫核销</button>
+    <input class="ghost-btn" style="margin-top:12rpx;padding-left:16rpx;" placeholder="输入优惠券核销码" value="{{scanInput}}" bindinput="onScanInput"/>
+    <button class="ghost-btn" style="margin-top:12rpx;" bindtap="verifyManual">手动核销</button>
+    <view wx:if="verifyMessage" class="info-text" style="margin-top:12rpx;">{{verifyMessage}}</view>
+  </view>
+</view>

@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "优惠券核销",
+    "navigationBarBackgroundColor": "#39b54a",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f6f7fb",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2"
+}

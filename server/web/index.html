@@ -46,7 +46,12 @@
   <div class="card" id="authCard">
     <h3>登录</h3>
     <p class="small">超级管理员账号：admin / password；门店管理员与员工账号为手机号，需匹配各自密码。</p>
-    <div class="form-row">
+    <div id="loginChooser" class="actions" style="margin-top:8px;">
+      <button onclick="chooseLogin('super')">超管登录</button>
+      <button class="secondary" onclick="chooseLogin('manager')">门店管理员登录</button>
+    </div>
+
+    <div id="adminForm" class="form-row hidden">
       <div>
         <label>超级管理员账号</label>
         <input id="adminUser" placeholder="admin" value="admin" />
@@ -59,7 +64,8 @@
         <button onclick="adminLogin()">管理员登录</button>
       </div>
     </div>
-    <div class="form-row" style="margin-top:8px;">
+
+    <div id="managerForm" class="form-row hidden" style="margin-top:8px;">
       <div>
         <label>门店管理员手机号</label>
         <input id="mgrPhone" placeholder="请输入11位手机号" />
@@ -72,9 +78,14 @@
         <button class="secondary" onclick="managerLogin()">门店管理员登录</button>
       </div>
     </div>
-    <p id="sessionInfo" class="small"></p>
+
+    <div class="small" id="loginBack" style="margin-top:8px;" hidden>
+      <button class="link" onclick="showLoginChoice()">返回角色选择</button>
+      <span id="sessionInfo"></span>
+    </div>
   </div>
-  <div class="layout">
+
+  <div class="layout hidden" id="mainLayout">
     <aside class="sidebar">
       <button class="nav-btn active" id="tabCustomers" onclick="switchView('customers')">用户列表</button>
       <button class="nav-btn" id="tabEmployees" onclick="switchView('employees')">员工列表</button>
@@ -346,6 +357,7 @@
     let sessionRole = null;
     let currentStoreId = null;
     let currentManager = null;
+    let authMode = null;
 
     const views = ['customers', 'employees', 'general', 'issue', 'coupons', 'stores'];
 
@@ -390,6 +402,35 @@
       return /^\d{11}$/.test((phone || '').toString());
     }
 
+    function ensureManagerStore(input) {
+      if (sessionRole === 'manager' && currentStoreId) return currentStoreId;
+      return input || null;
+    }
+
+    function showLoginChoice() {
+      authMode = null;
+      document.getElementById('loginChooser').classList.remove('hidden');
+      document.getElementById('adminForm').classList.add('hidden');
+      document.getElementById('managerForm').classList.add('hidden');
+      document.getElementById('loginBack').hidden = true;
+      renderSessionInfo();
+    }
+
+    function chooseLogin(mode) {
+      authMode = mode;
+      document.getElementById('loginChooser').classList.add('hidden');
+      document.getElementById('loginBack').hidden = false;
+      if (mode === 'super') {
+        document.getElementById('adminForm').classList.remove('hidden');
+        document.getElementById('managerForm').classList.add('hidden');
+        document.getElementById('adminUser').focus();
+      } else {
+        document.getElementById('managerForm').classList.remove('hidden');
+        document.getElementById('adminForm').classList.add('hidden');
+        document.getElementById('mgrPhone').focus();
+      }
+    }
+
     function renderSessionInfo() {
       const info = document.getElementById('sessionInfo');
       if (sessionRole === 'super') {
@@ -398,6 +439,36 @@
         info.innerText = `当前角色：门店管理员（门店 ${currentStoreId || ''}，${currentManager?.name || ''}）`;
       } else {
         info.innerText = '未登录';
+      }
+    }
+
+    function setNavVisibility() {
+      document.getElementById('tabStores').classList.toggle('hidden', sessionRole !== 'super');
+    }
+
+    function enterBackend(view = 'customers') {
+      document.getElementById('authCard').classList.add('hidden');
+      document.getElementById('mainLayout').classList.remove('hidden');
+      setNavVisibility();
+      const empStoreInput = document.getElementById('empStore');
+      if (sessionRole === 'manager') {
+        empStoreInput.value = currentStoreId || '';
+        empStoreInput.setAttribute('disabled', 'disabled');
+      } else {
+        empStoreInput.removeAttribute('disabled');
+      }
+      renderSessionInfo();
+      switchView(view);
+      loadCustomers();
+      renderIssueUser();
+      loadGeneralCoupons();
+      loadCouponsList();
+      if (sessionRole === 'super') {
+        loadStores();
+        loadEmployees();
+      }
+      if (sessionRole === 'manager') {
+        loadEmployees();
       }
     }
 
@@ -413,8 +484,7 @@
         sessionRole = 'super';
         currentStoreId = null;
         currentManager = null;
-        renderSessionInfo();
-        loadStores();
+        enterBackend();
       } else {
         alert('管理员账号或密码错误');
       }
@@ -437,11 +507,7 @@
         sessionRole = 'manager';
         currentStoreId = data.storeId;
         currentManager = data;
-        renderSessionInfo();
-        loadEmployees();
-        loadGeneralCoupons();
-        loadCouponsList();
-        loadCustomers();
+        enterBackend();
       } else {
         alert('门店管理员账号或密码错误');
       }
@@ -993,12 +1059,7 @@
         .catch((err) => alert(err.message || '发放失败'));
     }
 
-    renderSessionInfo();
-    switchView('customers');
-    loadCustomers();
-    loadGeneralCoupons();
-    renderIssueUser();
-    loadCouponsList();
+    showLoginChoice();
   </script>
 </body>
 </html>

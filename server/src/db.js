@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS general_coupons (
   duration_days INTEGER NOT NULL DEFAULT 0,
   coupon_type TEXT NOT NULL,
   store_scope TEXT,
+  store_id INTEGER,
   status TEXT NOT NULL DEFAULT 'active',
   issued_count INTEGER NOT NULL DEFAULT 0,
   used_count INTEGER NOT NULL DEFAULT 0,

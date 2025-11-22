@@ -110,4 +110,4 @@ ensureColumn('employees', 'store_id', 'INTEGER');
 ensureColumn('employees', 'staff_code', 'TEXT UNIQUE');
 ensureColumn('employees', 'password', 'TEXT');
 
-export { db, columnExists };
+export { db, columnExists, ensureColumn };

@@ -4,10 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nanoid } from 'nanoid';
 import { db, columnExists } from './db.js';
+import { runMigrations } from './migrate.js';
 import templates from './templates.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+runMigrations();
 
 const app = express();
 app.use(cors());
@@ -71,6 +74,9 @@ const serializeGeneralCoupon = (row) => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at
 });
+
+// Cache column support to avoid runtime SQL errors on legacy databases
+const couponsHasStoreId = columnExists('coupons', 'store_id');
 
 app.get('/health', (req, res) => {
   res.json({ ok: true });
@@ -289,8 +295,11 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
 
 app.get('/api/customers', (req, res) => {
   const phone = (req.query.phone || '').trim();
-  const storeId = req.query.storeId ? Number(req.query.storeId) : null;
-  const joinFilter = storeId ? 'LEFT JOIN coupons ON coupons.customer_id = customers.id AND coupons.store_id = @storeId' : 'LEFT JOIN coupons ON coupons.customer_id = customers.id';
+  const requestStoreId = req.query.storeId ? Number(req.query.storeId) : null;
+  const storeId = couponsHasStoreId ? requestStoreId : null;
+  const joinFilter = storeId
+    ? 'LEFT JOIN coupons ON coupons.customer_id = customers.id AND coupons.store_id = @storeId'
+    : 'LEFT JOIN coupons ON coupons.customer_id = customers.id';
   const rows = phone
     ? db
         .prepare(
@@ -438,7 +447,8 @@ app.get('/api/coupons', (req, res) => {
 
 app.get('/api/admin/coupons', (req, res) => {
   const query = (req.query.query || '').trim();
-  const storeId = req.query.storeId ? Number(req.query.storeId) : null;
+  const requestStoreId = req.query.storeId ? Number(req.query.storeId) : null;
+  const storeId = couponsHasStoreId ? requestStoreId : null;
   const storeWhere = storeId ? 'AND coupons.store_id = @storeId' : '';
   const rows = query
     ? db

@@ -5,7 +5,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "start": "node src/app.js"
+    "start": "node src/app.js",
+    "migrate": "node src/migrate.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.0.0",

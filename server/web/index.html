@@ -285,6 +285,8 @@
               <th>手机号</th>
               <th>有效期时长</th>
               <th>可用门店</th>
+              <th>核销时间</th>
+              <th>核销员工</th>
               <th>状态</th>
             </tr>
           </thead>
@@ -699,7 +701,7 @@
     function renderCoupons(items) {
       const tbody = document.getElementById('couponTable');
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="7">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">暂无数据</td></tr>';
         return;
       }
       tbody.innerHTML = items
@@ -712,6 +714,8 @@
             <td>${item.customerPhone || ''}</td>
             <td>${item.durationDays || 0} 天</td>
             <td>${item.storeScope || '全部门店'}</td>
+            <td>${item.usedAt || '-'}</td>
+            <td>${item.usedByStaffName ? `${item.usedByStaffName}(${item.usedByStaffPhone || ''})` : '-'}</td>
             <td class="${item.status === 'used' ? 'status-used' : 'status-active'}">${item.statusLabel}</td>
           </tr>
         `

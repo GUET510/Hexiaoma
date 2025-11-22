@@ -10,6 +10,9 @@ export function runMigrations() {
   ensureColumn('coupons', 'serial', 'TEXT UNIQUE');
   ensureColumn('coupons', 'store_scope', 'TEXT');
   ensureColumn('coupons', 'store_id', 'INTEGER');
+  ensureColumn('coupons', 'used_by_staff_id', 'INTEGER');
+  ensureColumn('coupons', 'used_by_staff_name', 'TEXT');
+  ensureColumn('coupons', 'used_by_staff_phone', 'TEXT');
 
   // Employee table safety checks
   ensureColumn('employees', 'store_id', 'INTEGER');

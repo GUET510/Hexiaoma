@@ -630,7 +630,9 @@ app.post('/api/coupons/verify', (req, res) => {
     res.status(400).json({ success: false, message: '该优惠券已核销' });
     return;
   }
-  db.prepare("UPDATE coupons SET status = ?, used_at = datetime('now') WHERE id = ?").run('used', coupon.id);
+  db.prepare(
+    "UPDATE coupons SET status = ?, used_at = datetime('now'), used_by_staff_id = NULL, used_by_staff_name = NULL, used_by_staff_phone = NULL WHERE id = ?"
+  ).run('used', coupon.id);
   if (coupon.template_base_id) {
     db.prepare('UPDATE general_coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.template_base_id);
   }
@@ -661,7 +663,9 @@ app.post('/api/staff/verify', (req, res) => {
     res.status(400).json({ success: false, message: '该优惠券已核销' });
     return;
   }
-  db.prepare("UPDATE coupons SET status = ?, used_at = datetime('now') WHERE id = ?").run('used', coupon.id);
+  db.prepare(
+    "UPDATE coupons SET status = ?, used_at = datetime('now'), used_by_staff_id = ?, used_by_staff_name = ?, used_by_staff_phone = ? WHERE id = ?"
+  ).run('used', employee.id, employee.name, employee.phone, coupon.id);
   if (coupon.template_base_id) {
     db.prepare('UPDATE general_coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.template_base_id);
   }
@@ -689,7 +693,10 @@ function serializeCoupon(row, includePhone = false) {
     statusLabel: row.status === 'used' ? '已核销' : '未核销',
     customerPhone: includePhone ? row.customer_phone : undefined,
     storeScope: row.store_scope || '全部门店',
-    storeId: row.store_id
+    storeId: row.store_id,
+    usedByStaffId: row.used_by_staff_id,
+    usedByStaffName: row.used_by_staff_name,
+    usedByStaffPhone: row.used_by_staff_phone
   };
 }
 

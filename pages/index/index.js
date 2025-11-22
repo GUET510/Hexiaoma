@@ -47,13 +47,15 @@ Page({
       success: (res) => {
         const coupons = (res.data && res.data.coupons) || [];
         const active = coupons.filter(item => item.status === 'active');
+        const decoratedCoupons = coupons.map(coupon => this.decorateCoupon(coupon));
+        const decoratedActive = active.map(coupon => this.decorateCoupon(coupon));
         this.setData({
-          coupons: coupons.map(coupon => this.decorateCoupon(coupon)),
-          activeCoupons: active.map(coupon => this.decorateCoupon(coupon)),
-          qrReady: active.length > 0
+          coupons: decoratedCoupons,
+          activeCoupons: decoratedActive,
+          qrReady: decoratedActive.length > 0
         }, () => {
-          if (active.length > 0) {
-            this.drawQrBatch(active);
+          if (decoratedActive.length > 0) {
+            this.drawQrBatch(decoratedActive);
           }
         });
         wx.setStorageSync('coupons', coupons);
@@ -103,6 +105,11 @@ Page({
   },
 
   drawQrBatch(coupons) {
+    if (!coupons || !coupons.length) {
+      this.setData({ qrReady: false });
+      return;
+    }
+
     // 确保页面渲染完成后再选择 canvas，否则节点可能为空导致不绘制
     wx.nextTick(() => {
       const query = wx.createSelectorQuery().in(this);
@@ -119,7 +126,8 @@ Page({
 
         const dpr = wx.getSystemInfoSync().pixelRatio || 1;
         const tasks = res.map((item, index) => {
-          if (!item || !item.node) return null;
+          const coupon = coupons[index];
+          if (!coupon || !item || !item.node) return null;
           const canvas = item.node;
           const ctx = canvas.getContext('2d');
           if (!ctx) return null;
@@ -127,23 +135,35 @@ Page({
           canvas.height = size * dpr;
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.clearRect(0, 0, size, size);
-          const coupon = coupons[index];
           makeQrToCanvas(coupon.code, { canvasId: `qr-${coupon.id}`, size, ctx });
 
           return new Promise((resolve) => {
-            wx.canvasToTempFilePath({
-              canvas,
-              x: 0,
-              y: 0,
-              width: size,
-              height: size,
-              destWidth: size * dpr,
-              destHeight: size * dpr,
-              success: (fileRes) => resolve({ id: coupon.id, path: fileRes.tempFilePath }),
-              fail: () => resolve(null)
-            }, this);
+            const exportToImage = () => {
+              wx.canvasToTempFilePath({
+                canvas,
+                x: 0,
+                y: 0,
+                width: size,
+                height: size,
+                destWidth: size * dpr,
+                destHeight: size * dpr,
+                success: (fileRes) => resolve({ id: coupon.id, path: fileRes.tempFilePath }),
+                fail: () => resolve(null)
+              }, this);
+            };
+
+            if (typeof canvas.requestAnimationFrame === 'function') {
+              canvas.requestAnimationFrame(exportToImage);
+            } else {
+              setTimeout(exportToImage, 50);
+            }
           });
         }).filter(Boolean);
+
+        if (!tasks.length) {
+          this.setData({ qrReady: false });
+          return;
+        }
 
         Promise.all(tasks).then((images) => {
           if (!images.length) return;

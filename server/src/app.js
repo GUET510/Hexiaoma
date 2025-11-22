@@ -22,6 +22,29 @@ app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/customers', (req, res) => {
+  const rows = db
+    .prepare(`
+      SELECT customers.id, customers.phone, customers.created_at, COUNT(coupons.id) AS coupon_count,
+        SUM(CASE WHEN coupons.status = 'used' THEN 1 ELSE 0 END) AS used_count
+      FROM customers
+      LEFT JOIN coupons ON coupons.customer_id = customers.id
+      GROUP BY customers.id
+      ORDER BY customers.created_at DESC
+    `)
+    .all();
+
+  const customers = rows.map((row) => ({
+    id: row.id,
+    phone: row.phone,
+    createdAt: row.created_at,
+    couponCount: row.coupon_count || 0,
+    usedCount: row.used_count || 0
+  }));
+
+  res.json({ customers });
+});
+
 app.post('/api/login', (req, res) => {
   const phone = (req.body.phone || '').toString();
   if (!phone) {

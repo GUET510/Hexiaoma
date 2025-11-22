@@ -6,7 +6,7 @@
 - 手机号授权登录，后端生成并返回 `customerId`。
 - 选择优惠券模板（200 元优惠券、500 元油卡券、300 元保养券）并生成唯一核销码，前端同步绘制真实二维码图片。
 - 列表展示全部优惠券状态，支持扫码或手动输入核销码后回写数据库。
-- 后端使用 SQLite 持久化客户与核销码数据，并提供 Web 端查看/核销示例页。
+- 后端使用 SQLite 持久化客户与核销码数据，并提供 Web 端查看/核销示例页（支持直接选取用户并查看券列表）。
 
 ## 启动步骤
 ### 1) 后端服务
@@ -29,11 +29,12 @@ npm start  # 默认 http://localhost:3000
 
 ### 3) Web 后台（示例）
 - 启动后端后，访问 `http://localhost:3000` 即可打开简单的管理页：
-  - 填写登录返回的 `customerId`，选择模板生成优惠券。
-  - 查看该客户的优惠券列表并手动核销。
+  - 左侧用户列表直接选择用户，或填写登录返回的 `customerId` 后查看该客户信息。
+  - 选择模板生成优惠券，并在列表中手动核销。
 
 ## API 摘要
 - `POST /api/login`：`{ phone }` → `{ customerId, phone }`
+- `GET /api/customers`：返回全部用户及已发券/已核销数量。
 - `GET /api/coupons?customerId=xxx`：返回该客户全部优惠券。
 - `POST /api/coupons`：`{ customerId, templateId }` 生成优惠券。
 - `POST /api/coupons/verify`：`{ customerId, code }` 核销优惠券。

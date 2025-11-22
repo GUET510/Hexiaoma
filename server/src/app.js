@@ -199,24 +199,29 @@ app.post('/api/general-coupons', (req, res) => {
     res.status(400).json({ message: 'name, amount, couponType are required' });
     return;
   }
-  const id = nextGeneralCouponId();
-  const stmt = db.prepare(`
-    INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, store_id, status)
-    VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, @storeId, 'active')
-  `);
-  stmt.run({
-    id,
-    name,
-    brand: brand || '',
-    amount: Number(amount),
-    minSpend: Number(minSpend) || 0,
-    durationDays: Number(durationDays) || 0,
-    couponType,
-    storeScope: storeScope || '全部门店',
-    storeId: storeId ? Number(storeId) : null
-  });
-  const created = getGeneralCouponById(id);
-  res.status(201).json({ template: serializeGeneralCoupon(created) });
+  try {
+    const id = nextGeneralCouponId();
+    const stmt = db.prepare(`
+      INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, store_id, status)
+      VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, @storeId, 'active')
+    `);
+    stmt.run({
+      id,
+      name,
+      brand: brand || '',
+      amount: Number(amount),
+      minSpend: Number(minSpend) || 0,
+      durationDays: Number(durationDays) || 0,
+      couponType,
+      storeScope: storeScope || '全部门店',
+      storeId: storeId ? Number(storeId) : null
+    });
+    const created = getGeneralCouponById(id);
+    res.status(201).json({ template: serializeGeneralCoupon(created) });
+  } catch (err) {
+    console.error('create general coupon failed', err);
+    res.status(500).json({ message: '创建通用优惠券失败，请检查数据后重试' });
+  }
 });
 
 app.put('/api/general-coupons/:id', (req, res) => {

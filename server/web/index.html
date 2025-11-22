@@ -892,13 +892,20 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-        .then((r) => r.json())
+        .then(async (r) => {
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            const msg = data?.message || '保存失败，请检查填写项';
+            throw new Error(msg);
+          }
+          return data;
+        })
         .then(() => {
           resetGeneralForm();
           showGeneralList();
           alert('保存成功');
         })
-        .catch(() => alert('保存失败'));
+        .catch((err) => alert(err.message || '保存失败'));
     }
 
     function toggleTemplate(id) {

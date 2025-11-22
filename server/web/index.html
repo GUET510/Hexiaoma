@@ -446,10 +446,18 @@
     }
 
     function submitGeneralCoupon() {
+      const name = document.getElementById('tplName').value.trim();
+      const amount = Number(document.getElementById('tplAmount').value);
+      if (!name || !amount || Number.isNaN(amount) || amount <= 0) {
+        switchView('general');
+        document.getElementById('tplName').focus();
+        alert('请先填写优惠券名称与金额，再创建通用优惠券');
+        return;
+      }
       const payload = {
-        name: document.getElementById('tplName').value.trim(),
+        name,
         brand: document.getElementById('tplBrand').value.trim(),
-        amount: Number(document.getElementById('tplAmount').value),
+        amount,
         minSpend: Number(document.getElementById('tplMinSpend').value) || 0,
         durationDays: Number(document.getElementById('tplDuration').value) || 0,
         couponType: document.getElementById('tplType').value

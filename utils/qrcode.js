@@ -162,8 +162,10 @@
   };
 
   var QRRSBlock = {
+    TABLE: [[1, 19, 7], [1, 34, 10], [1, 55, 15], [1, 80, 20], [1, 108, 26], [2, 68, 18], [2, 78, 20], [2, 97, 24], [2, 116, 30], [2, 68, 18], [2, 81, 20], [2, 92, 24], [2, 107, 28], [2, 115, 30]],
     getRSBlocks: function(typeNumber) {
-      return [[1, 19, 7], [1, 34, 10], [1, 55, 15], [1, 80, 20], [1, 108, 26], [2, 68, 18], [2, 78, 20], [2, 97, 24], [2, 116, 30], [2, 68, 18], [2, 81, 20], [2, 92, 24], [2, 107, 28], [2, 115, 30]][typeNumber - 1];
+      var safeType = Math.min(Math.max(1, typeNumber || 4), this.TABLE.length);
+      return this.TABLE[safeType - 1];
     }
   };
 
@@ -202,7 +204,7 @@
     isDark: function(row, col) { return this.modules[row][col]; },
     getModuleCount: function() { return this.moduleCount; },
     make: function() {
-      this.typeNumber = this.typeNumber || 4;
+      this.typeNumber = Math.min(Math.max(1, this.typeNumber || 4), QRRSBlock.TABLE.length);
       this.moduleCount = this.typeNumber * 4 + 17;
       this.modules = new Array(this.moduleCount);
       for (var row = 0; row < this.moduleCount; row++) {

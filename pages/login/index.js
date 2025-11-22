@@ -19,19 +19,13 @@ Page({
 
   onGetPhoneNumber(e) {
     const directPhone = e.detail.errMsg === 'getPhoneNumber:ok' ? e.detail.phoneNumber : '';
-    const manualPhone = (this.data.manualPhone || '').trim();
 
     if (directPhone) {
       this.registerCustomer(directPhone);
       return;
     }
 
-    if (manualPhone) {
-      this.registerCustomer(manualPhone);
-      return;
-    }
-
-    wx.showToast({ title: '请输入手机号或授权获取', icon: 'none' });
+    wx.showToast({ title: '未获取到授权手机号，请重试或手动输入', icon: 'none' });
   },
 
   onManualPhoneInput(e) {

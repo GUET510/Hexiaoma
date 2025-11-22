@@ -79,6 +79,7 @@
               <th>名称/品牌</th>
               <th>金额/门槛</th>
               <th>有效期</th>
+              <th>适用门店</th>
               <th>类型</th>
               <th>状态</th>
               <th>数量</th>
@@ -132,6 +133,10 @@
             <div>
               <label>品牌</label>
               <input id="tplBrand" placeholder="请输入品牌" />
+            </div>
+            <div>
+              <label>适用门店</label>
+              <input id="tplStore" placeholder="例：全部门店/XX门店" />
             </div>
             <div>
               <label>优惠金额</label>
@@ -279,7 +284,7 @@
     function renderGeneralList(items) {
       const tbody = document.getElementById('generalList');
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="8">暂无通用优惠券</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">暂无通用优惠券</td></tr>';
         return;
       }
       tbody.innerHTML = items
@@ -293,6 +298,7 @@
             </td>
             <td>${tpl.amount} 元 / 满 ${tpl.minSpend || 0}</td>
             <td>${tpl.durationDays || 0} 天</td>
+            <td>${tpl.storeScope || '全部门店'}</td>
             <td>${tpl.couponType}</td>
             <td>${tpl.status === 'inactive' ? '下架' : '上架中'}</td>
             <td>发放 ${tpl.issuedCount} · 核销 ${tpl.usedCount} · 锁定 ${tpl.lockedCount}</td>
@@ -356,7 +362,7 @@
               <span class="pill">${tpl.couponType}</span>
             </div>
             <div class="small">品牌：${tpl.brand || '未设置'} · 金额：${tpl.amount} · 门槛：${tpl.minSpend || 0}</div>
-            <div class="small">有效期：${tpl.durationDays || 0} 天 · 状态：${tpl.status === 'inactive' ? '下架' : '上架'}</div>
+            <div class="small">有效期：${tpl.durationDays || 0} 天 · 门店：${tpl.storeScope || '全部门店'} · 状态：${tpl.status === 'inactive' ? '下架' : '上架'}</div>
             <div class="small">发放：${tpl.issuedCount} / 核销：${tpl.usedCount}</div>
             <div class="form-row" style="margin-top:8px; align-items:center;">
               <div style="flex:1;">
@@ -413,7 +419,7 @@
           renderIssueTemplates();
         })
         .catch(() => {
-          document.getElementById('generalList').innerHTML = '<tr><td colspan="8">加载失败</td></tr>';
+          document.getElementById('generalList').innerHTML = '<tr><td colspan="9">加载失败</td></tr>';
         });
     }
 
@@ -462,6 +468,7 @@
       editingTplId = id;
       document.getElementById('tplName').value = tpl.name;
       document.getElementById('tplBrand').value = tpl.brand || '';
+      document.getElementById('tplStore').value = tpl.storeScope || '';
       document.getElementById('tplAmount').value = tpl.amount;
       document.getElementById('tplMinSpend').value = tpl.minSpend || 0;
       document.getElementById('tplDuration').value = tpl.durationDays || 0;
@@ -473,6 +480,7 @@
       editingTplId = null;
       document.getElementById('tplName').value = '';
       document.getElementById('tplBrand').value = '';
+      document.getElementById('tplStore').value = '';
       document.getElementById('tplAmount').value = '';
       document.getElementById('tplMinSpend').value = '';
       document.getElementById('tplDuration').value = '';
@@ -492,6 +500,7 @@
       const payload = {
         name,
         brand: document.getElementById('tplBrand').value.trim(),
+        storeScope: document.getElementById('tplStore').value.trim(),
         amount,
         minSpend: Number(document.getElementById('tplMinSpend').value) || 0,
         durationDays: Number(document.getElementById('tplDuration').value) || 0,

@@ -5,21 +5,8 @@
   </view>
 
   <view class="section">
-    <view class="section-title">生成优惠券 <text class="badge">可选择券种</text></view>
-    <view class="info-text">请选择一种优惠券类型生成二维码，可重复生成不同券。</view>
-    <radio-group class="coupon-options" bindchange="onSelectCoupon">
-      <block wx:for="{{couponOptions}}" wx:key="id">
-        <label class="option-card" for="{{item.id}}">
-          <radio id="{{item.id}}" value="{{item.id}}" checked="{{item.id === selectedCouponId}}" color="#39b54a" />
-          <view class="option-content">
-            <view class="option-title">{{item.title}}</view>
-            <view class="info-text">{{item.tip}}</view>
-          </view>
-        </label>
-      </block>
-    </radio-group>
-    <button class="primary-btn" bindtap="generateCoupon">生成所选优惠券二维码</button>
-    <view class="qr-wrapper" style="margin-top:24rpx;" wx:if="qrReady">
+    <view class="section-title">我的优惠券二维码</view>
+    <view wx:if="qrReady" class="qr-wrapper" style="margin-top:12rpx;">
       <view class="qr-grid">
         <block wx:for="{{activeCoupons}}" wx:key="id">
           <view class="qr-card">
@@ -34,11 +21,11 @@
         </block>
       </view>
     </view>
-    <view wx:else class="qr-tip">二维码生成后会展示在这里</view>
+    <view wx:else class="qr-tip">暂时没有可用优惠券二维码</view>
   </view>
 
   <view class="section">
-    <view class="section-title">优惠券列表 <text class="badge">本地示例</text></view>
+    <view class="section-title">优惠券列表</view>
     <block wx:if="{{coupons && coupons.length}}">
       <block wx:for="{{coupons}}" wx:key="id">
         <view class="coupon-card">
@@ -46,11 +33,12 @@
             <view>{{item.title || '优惠券'}} · {{item.code}}</view>
             <view class="coupon-status {{item.status === 'used' ? 'used' : ''}}">{{item.status === 'used' ? '已核销' : '未核销'}}</view>
           </view>
-          <view class="tag">{{item.createdAt}}</view>
+          <view class="tag">有效期：{{item.validityText}}</view>
+          <view class="tag">适用门店：{{item.storeScope || '全部门店'}}</view>
         </view>
       </block>
     </block>
-    <view wx:else class="info-text">暂无优惠券，点击上方按钮生成。</view>
+    <view wx:else class="info-text">暂无优惠券，请联系工作人员发放。</view>
   </view>
 
   <view class="section">

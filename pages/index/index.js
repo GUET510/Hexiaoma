@@ -6,13 +6,7 @@ Page({
     phoneDisplay: '',
     coupons: [],
     activeCoupons: [],
-    qrReady: false,
-    couponOptions: [
-      { id: 'discount200', title: '200元优惠券', faceValue: 200, category: '通用', tip: '日常消费通用' },
-      { id: 'oil500', title: '500元油卡券', faceValue: 500, category: '油卡', tip: '加油充值专享' },
-      { id: 'service300', title: '300元保养券', faceValue: 300, category: '保养', tip: '汽车保养抵扣' }
-    ],
-    selectedCouponId: 'discount200'
+    qrReady: false
   },
 
   onLoad() {
@@ -63,39 +57,6 @@ Page({
       },
       fail: () => {
         wx.showToast({ title: '获取优惠券失败，请检查后端服务', icon: 'none' });
-      }
-    });
-  },
-
-  onSelectCoupon(e) {
-    this.setData({ selectedCouponId: e.detail.value });
-  },
-
-  generateCoupon() {
-    if (!app.globalData.userPhone || !app.globalData.customerId) {
-      wx.showToast({ title: '请先登录', icon: 'none' });
-      wx.reLaunch({ url: '/pages/login/index' });
-      return;
-    }
-    const preset = this.data.couponOptions.find(item => item.id === this.data.selectedCouponId);
-    if (!preset) {
-      wx.showToast({ title: '请选择要生成的优惠券', icon: 'none' });
-      return;
-    }
-
-    wx.request({
-      url: `${app.globalData.apiBaseUrl}/api/coupons`,
-      method: 'POST',
-      data: {
-        customerId: app.globalData.customerId,
-        templateId: preset.id
-      },
-      success: () => {
-        wx.showToast({ title: '生成成功', icon: 'success' });
-        this.syncCoupons();
-      },
-      fail: () => {
-        wx.showToast({ title: '生成失败，请检查后端服务', icon: 'none' });
       }
     });
   },
@@ -178,9 +139,31 @@ Page({
   },
 
   decorateCoupon(coupon) {
+    const storeScope = coupon.storeScope || '全部门店';
     return {
       ...coupon,
-      statusLabel: coupon.status === 'used' ? '已核销' : '未核销'
+      statusLabel: coupon.status === 'used' ? '已核销' : '未核销',
+      validityText: this.computeValidityText(coupon),
+      storeScope
     };
+  },
+
+  computeValidityText(coupon) {
+    const days = Number(coupon.durationDays);
+    if (!days) return '长期有效';
+
+    const createdAt = coupon.createdAt ? new Date(coupon.createdAt.replace(/ /g, 'T')) : null;
+    if (createdAt && !Number.isNaN(createdAt.getTime())) {
+      const expired = new Date(createdAt.getTime() + days * 24 * 60 * 60 * 1000);
+      const format = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      return `${format(createdAt)} 至 ${format(expired)}`;
+    }
+
+    return `${days}天内有效`;
   }
 });

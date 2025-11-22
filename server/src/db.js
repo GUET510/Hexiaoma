@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS general_coupons (
   min_spend INTEGER NOT NULL DEFAULT 0,
   duration_days INTEGER NOT NULL DEFAULT 0,
   coupon_type TEXT NOT NULL,
+  store_scope TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   issued_count INTEGER NOT NULL DEFAULT 0,
   used_count INTEGER NOT NULL DEFAULT 0,
@@ -78,5 +79,6 @@ ensureColumn('coupons', 'coupon_type', 'TEXT');
 ensureColumn('coupons', 'template_base_id', 'INTEGER');
 ensureColumn('coupons', 'serial', 'TEXT UNIQUE');
 ensureColumn('coupons', 'store_scope', 'TEXT');
+ensureColumn('general_coupons', 'store_scope', 'TEXT');
 
 export { db };

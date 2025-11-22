@@ -3,7 +3,8 @@ const app = getApp();
 Page({
   data: {
     phoneDisplay: '未授权',
-    loading: false
+    loading: false,
+    manualPhone: ''
   },
 
   onLoad() {
@@ -17,12 +18,33 @@ Page({
   },
 
   onGetPhoneNumber(e) {
-    if (e.detail.errMsg === 'getPhoneNumber:ok') {
-      const phone = e.detail.phoneNumber || e.detail.code || '用户手机号已授权';
-      this.registerCustomer(phone);
-    } else {
-      wx.showToast({ title: '需要手机号授权', icon: 'none' });
+    const directPhone = e.detail.errMsg === 'getPhoneNumber:ok' ? e.detail.phoneNumber : '';
+    const manualPhone = (this.data.manualPhone || '').trim();
+
+    if (directPhone) {
+      this.registerCustomer(directPhone);
+      return;
     }
+
+    if (manualPhone) {
+      this.registerCustomer(manualPhone);
+      return;
+    }
+
+    wx.showToast({ title: '请输入手机号或授权获取', icon: 'none' });
+  },
+
+  onManualPhoneInput(e) {
+    this.setData({ manualPhone: (e.detail.value || '').trim() });
+  },
+
+  onManualSubmit() {
+    const manualPhone = (this.data.manualPhone || '').trim();
+    if (!manualPhone) {
+      wx.showToast({ title: '请先输入手机号', icon: 'none' });
+      return;
+    }
+    this.registerCustomer(manualPhone);
   },
 
   registerCustomer(phone) {

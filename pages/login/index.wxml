@@ -2,6 +2,8 @@
   <view class="section">
     <view class="section-title">手机号授权 <text class="badge">必需</text></view>
     <view class="info-text">授权后可生成优惠券二维码并进行核销。</view>
+    <input class="input" type="number" placeholder="或直接输入手机号" bindinput="onManualPhoneInput" value="{{manualPhone}}" />
     <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber">手机号授权登录</button>
+    <button class="secondary-btn" bindtap="onManualSubmit">使用输入的手机号登录</button>
   </view>
 </view>

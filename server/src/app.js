@@ -63,8 +63,6 @@ const serializeGeneralCoupon = (row) => ({
   minSpend: row.min_spend,
   durationDays: row.duration_days,
   couponType: row.coupon_type,
-  storeScope: row.store_scope,
-  storeId: row.store_id,
   status: row.status,
   issuedCount: row.issued_count,
   usedCount: row.used_count,
@@ -176,29 +174,20 @@ app.post('/api/manager/login', (req, res) => {
 
 app.get('/api/general-coupons', (req, res) => {
   const query = (req.query.query || '').trim();
-  const storeId = req.query.storeId ? Number(req.query.storeId) : null;
-  const whereStore = storeId ? 'AND (store_id IS NULL OR store_id = @storeId)' : '';
   const rows = query
     ? db
-        .prepare(
-          `SELECT * FROM general_coupons WHERE (name LIKE @q OR brand LIKE @q) ${whereStore} ORDER BY created_at DESC`
-        )
-        .all({ q: `%${query}%`, storeId })
-    : db
-        .prepare(
-          `SELECT * FROM general_coupons WHERE 1=1 ${whereStore} ORDER BY created_at DESC`
-        )
-        .all({ storeId });
+        .prepare(`SELECT * FROM general_coupons WHERE (name LIKE @q OR brand LIKE @q) ORDER BY created_at DESC`)
+        .all({ q: `%${query}%` })
+    : db.prepare(`SELECT * FROM general_coupons ORDER BY created_at DESC`).all();
 
   res.json({ templates: rows.map(serializeGeneralCoupon) });
 });
 
 app.post('/api/general-coupons', (req, res) => {
-  const { name, brand, amount, minSpend, durationDays, couponType, storeScope, storeId } = req.body || {};
+  const { name, brand, amount, minSpend, durationDays, couponType } = req.body || {};
   const amountValue = Number(amount);
   const minSpendValue = Number(minSpend) || 0;
   const durationValue = Number(durationDays) || 0;
-  const storeIdValue = storeId === undefined || storeId === null || storeId === '' ? null : Number(storeId);
 
   if (!name || !amount || !couponType) {
     res.status(400).json({ message: 'name, amount, couponType are required' });
@@ -208,23 +197,12 @@ app.post('/api/general-coupons', (req, res) => {
     res.status(400).json({ message: '金额必须为正数' });
     return;
   }
-  if (storeIdValue !== null && !Number.isFinite(storeIdValue)) {
-    res.status(400).json({ message: '门店ID格式不正确' });
-    return;
-  }
-  if (storeIdValue !== null) {
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeIdValue);
-    if (!store) {
-      res.status(404).json({ message: '门店不存在，请先创建门店' });
-      return;
-    }
-  }
 
   try {
     const id = nextGeneralCouponId();
     const stmt = db.prepare(`
-      INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, store_id, status)
-      VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, @storeId, 'active')
+      INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, status)
+      VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, 'active')
     `);
     stmt.run({
       id,
@@ -233,9 +211,7 @@ app.post('/api/general-coupons', (req, res) => {
       amount: amountValue,
       minSpend: minSpendValue,
       durationDays: durationValue,
-      couponType,
-      storeScope: storeScope || '全部门店',
-      storeId: storeIdValue
+      couponType
     });
     const created = getGeneralCouponById(id);
     res.status(201).json({ template: serializeGeneralCoupon(created) });
@@ -252,11 +228,11 @@ app.put('/api/general-coupons/:id', (req, res) => {
     res.status(404).json({ message: '模板不存在' });
     return;
   }
-  const { name, brand, amount, minSpend, durationDays, couponType, status, storeScope, storeId } = req.body || {};
+  const { name, brand, amount, minSpend, durationDays, couponType, status } = req.body || {};
   const stmt = db.prepare(`
     UPDATE general_coupons
     SET name = @name, brand = @brand, amount = @amount, min_spend = @minSpend,
-        duration_days = @durationDays, coupon_type = @couponType, store_scope = @storeScope, store_id = COALESCE(@storeId, store_id),
+        duration_days = @durationDays, coupon_type = @couponType,
         status = COALESCE(@status, status),
         updated_at = datetime('now')
     WHERE id = @id
@@ -269,8 +245,6 @@ app.put('/api/general-coupons/:id', (req, res) => {
     minSpend: minSpend != null ? Number(minSpend) : template.min_spend,
     durationDays: durationDays != null ? Number(durationDays) : template.duration_days,
     couponType: couponType || template.coupon_type,
-    storeScope: storeScope ?? template.store_scope,
-    storeId: storeId != null ? Number(storeId) : template.store_id,
     status
   });
   const updated = getGeneralCouponById(id);
@@ -298,8 +272,8 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
   }
   const newId = nextGeneralCouponId();
   db.prepare(
-    `INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, store_id, status)
-     VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, @storeId, 'active')`
+    `INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, status)
+     VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, 'active')`
   ).run({
     id: newId,
     name: template.name,
@@ -307,9 +281,7 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
     amount: template.amount,
     minSpend: template.min_spend,
     durationDays: template.duration_days,
-    couponType: template.coupon_type,
-    storeScope: template.store_scope,
-    storeId: template.store_id
+    couponType: template.coupon_type
   });
   const created = getGeneralCouponById(newId);
   res.status(201).json({ template: serializeGeneralCoupon(created) });
@@ -593,7 +565,7 @@ app.post('/api/issue-coupons', (req, res) => {
       couponType: template.coupon_type,
       serial,
       storeScope: template.store_scope || '全部门店',
-      storeId: template.store_id || issueStoreId || null
+      storeId: issueStoreId || null
     });
     const coupon = db.prepare('SELECT * FROM coupons WHERE code = ?').get(code);
     issued.push(serializeCoupon({ ...coupon, customer_phone: ownerPhone }, true));

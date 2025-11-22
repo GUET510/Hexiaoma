@@ -31,7 +31,7 @@ npm start  # 默认 http://localhost:3000
 - 启动后端后，访问 `http://localhost:3000` 即可打开管理页：
   - **用户列表**：按手机号搜索或直接浏览用户，并跳转查看/发放。
 - **通用优惠券**：在列表页点击“创建通用优惠券”进入独立创建页，填写名称、品牌、金额、最低消费、适用门店、有效期时长、类型，自动生成 6 位 ID（从 100000 起），支持下架/上架、复制、修改。
-  - **优惠券发放**：按手机号检索用户，选择通用券输入发放数量，生成实际优惠券，优惠券 ID 形如 `通用券ID_00000`（序号从 10000 起）。
+  - **优惠券发放**：按手机号检索用户并选择已存在的用户后，再选择通用券输入发放数量，生成实际优惠券，优惠券 ID 形如 `通用券ID_00000`（序号从 10000 起）；不存在的手机号会提示失败，不再自动创建用户。
   - **优惠券列表**：查看所有实际券（ID、名称、用户 ID、手机号、有效期时长、可用门店、状态）。
 
 ## API 摘要
@@ -43,7 +43,7 @@ npm start  # 默认 http://localhost:3000
 - `GET /api/general-coupons[?query=xxx]`：查询通用优惠券模板。
 - `POST /api/general-coupons` / `PUT /api/general-coupons/:id`：创建或修改通用券。
 - `POST /api/general-coupons/:id/down` / `POST /api/general-coupons/:id/duplicate`：下架或复制通用券。
-- `POST /api/issue-coupons`：`{ customerId|phone, templateId, quantity }` 将通用券发放为实际优惠券，实际券 ID 由通用券 6 位 ID 与 5 位流水号组成。
+- `POST /api/issue-coupons`：`{ customerId|phone, templateId, quantity }` 将通用券发放为实际优惠券，要求提供已存在的用户 ID 或手机号（不存在会返回 404）；实际券 ID 由通用券 6 位 ID 与 5 位流水号组成。
 
 ## 目录结构
 - `pages/`：小程序前端页面（登录、主页、核销）。

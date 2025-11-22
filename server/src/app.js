@@ -291,14 +291,20 @@ app.post('/api/issue-coupons', (req, res) => {
     }
     const existing = db.prepare('SELECT * FROM customers WHERE phone = ?').get(ownerPhone);
     if (!existing) {
-      const result = db.prepare('INSERT INTO customers (phone) VALUES (?)').run(ownerPhone);
-      ownerId = result.lastInsertRowid;
-    } else {
-      ownerId = existing.id;
+      res.status(404).json({ message: '该手机号未注册用户，请先创建用户后再发放' });
+      return;
     }
-  } else if (!ownerPhone) {
+    ownerId = existing.id;
+    ownerPhone = existing.phone;
+  } else {
     const existing = db.prepare('SELECT * FROM customers WHERE id = ?').get(ownerId);
-    ownerPhone = existing?.phone || '';
+    if (!existing) {
+      res.status(404).json({ message: '用户不存在，请检查用户ID' });
+      return;
+    }
+    if (!ownerPhone) {
+      ownerPhone = existing.phone;
+    }
   }
 
   const inserts = db.prepare(`

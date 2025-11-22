@@ -591,13 +591,19 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-        .then((r) => r.json())
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok) {
+            throw new Error(data.message || '发放失败');
+          }
+          return data;
+        })
         .then(() => {
           loadGeneralCoupons();
           loadCouponsList();
           alert('发放成功');
         })
-        .catch(() => alert('发放失败'));
+        .catch((err) => alert(err.message || '发放失败'));
     }
 
     switchView('customers');

@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS coupons (
   template_base_id INTEGER,
   serial TEXT UNIQUE,
   store_scope TEXT,
+  store_id INTEGER,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   used_at TEXT,
@@ -109,4 +110,4 @@ ensureColumn('employees', 'store_id', 'INTEGER');
 ensureColumn('employees', 'staff_code', 'TEXT UNIQUE');
 ensureColumn('employees', 'password', 'TEXT');
 
-export { db };
+export { db, columnExists };

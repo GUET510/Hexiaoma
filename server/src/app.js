@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nanoid } from 'nanoid';
-import { db } from './db.js';
+import { db, columnExists } from './db.js';
 import templates from './templates.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -541,10 +541,37 @@ app.post('/api/issue-coupons', (req, res) => {
     }
   }
 
-  const inserts = db.prepare(`
-    INSERT INTO coupons (customer_id, template_id, template_base_id, code, title, face_value, category, brand, min_spend, duration_days, coupon_type, serial, store_scope, store_id, status)
-    VALUES (@customerId, @templateId, @templateBaseId, @code, @title, @faceValue, @category, @brand, @minSpend, @durationDays, @couponType, @serial, @storeScope, @storeId, 'active')
-  `);
+  const hasStoreId = columnExists('coupons', 'store_id');
+  const couponFields = [
+    { column: 'customer_id', key: 'customerId' },
+    { column: 'template_id', key: 'templateId' },
+    { column: 'template_base_id', key: 'templateBaseId' },
+    { column: 'code', key: 'code' },
+    { column: 'title', key: 'title' },
+    { column: 'face_value', key: 'faceValue' },
+    { column: 'category', key: 'category' },
+    { column: 'brand', key: 'brand' },
+    { column: 'min_spend', key: 'minSpend' },
+    { column: 'duration_days', key: 'durationDays' },
+    { column: 'coupon_type', key: 'couponType' },
+    { column: 'serial', key: 'serial' },
+    { column: 'store_scope', key: 'storeScope' }
+  ];
+
+  if (hasStoreId) {
+    couponFields.push({ column: 'store_id', key: 'storeId' });
+  }
+
+  couponFields.push({ column: 'status', raw: "'active'" });
+
+  const insertColumns = couponFields.map((f) => f.column).join(', ');
+  const insertValues = couponFields
+    .map((f) => (f.raw ? f.raw : `@${f.key}`))
+    .join(', ');
+
+  const inserts = db.prepare(
+    `INSERT INTO coupons (${insertColumns}) VALUES (${insertValues})`
+  );
 
   const issued = [];
   for (let i = 0; i < qty; i += 1) {

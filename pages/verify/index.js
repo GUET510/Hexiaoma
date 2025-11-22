@@ -3,44 +3,26 @@ const app = getApp();
 Page({
   data: {
     scanInput: '',
-    verifyMessage: '',
-    coupons: []
+    verifyMessage: ''
   },
 
   onLoad() {
-    this.ensureLogin();
-    this.syncCoupons();
+    this.ensureStaffLogin();
   },
 
   onShow() {
-    this.ensureLogin();
-    this.syncCoupons();
+    this.ensureStaffLogin();
   },
 
-  ensureLogin() {
-    const storedPhone = wx.getStorageSync('userPhone');
-    const storedCustomerId = wx.getStorageSync('customerId');
-    if (!storedPhone || !storedCustomerId) {
-      wx.reLaunch({ url: '/pages/login/index' });
+  ensureStaffLogin() {
+    const storedPhone = wx.getStorageSync('staffPhone');
+    const storedStaffId = wx.getStorageSync('staffId');
+    if (!storedPhone || !storedStaffId) {
+      wx.reLaunch({ url: '/pages/staff-login/index' });
     } else {
-      app.globalData.userPhone = storedPhone;
-      app.globalData.customerId = storedCustomerId;
+      app.globalData.staffPhone = storedPhone;
+      app.globalData.staffId = storedStaffId;
     }
-  },
-
-  syncCoupons() {
-    const customerId = app.globalData.customerId || wx.getStorageSync('customerId');
-    if (!customerId) return;
-    wx.request({
-      url: `${app.globalData.apiBaseUrl}/api/coupons`,
-      method: 'GET',
-      data: { customerId },
-      success: (res) => {
-        const coupons = (res.data && res.data.coupons) || [];
-        this.setData({ coupons });
-        app.globalData.coupons = coupons;
-      }
-    });
   },
 
   scanCoupon() {
@@ -69,16 +51,14 @@ Page({
       wx.showToast({ title: '请输入核销码', icon: 'none' });
       return;
     }
-    const customerId = app.globalData.customerId;
     wx.request({
-      url: `${app.globalData.apiBaseUrl}/api/coupons/verify`,
+      url: `${app.globalData.apiBaseUrl}/api/staff/verify`,
       method: 'POST',
-      data: { customerId, code: normalized },
+      data: { staffId: app.globalData.staffId || wx.getStorageSync('staffId'), code: normalized },
       success: (res) => {
         if (res.data && res.data.success) {
           wx.showToast({ title: '核销成功', icon: 'success' });
           this.setData({ verifyMessage: '核销成功', scanInput: '' });
-          this.syncCoupons();
         } else {
           this.setData({ verifyMessage: res.data && res.data.message ? res.data.message : '核销失败' });
         }

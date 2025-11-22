@@ -7,6 +7,10 @@ Page({
     manualPhone: ''
   },
 
+  goStaffLogin() {
+    wx.navigateTo({ url: '/pages/staff-login/index' });
+  },
+
   onLoad() {
     const storedPhone = wx.getStorageSync('userPhone');
     const storedCustomerId = wx.getStorageSync('customerId');

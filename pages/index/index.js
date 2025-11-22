@@ -61,10 +61,6 @@ Page({
     });
   },
 
-  goVerify() {
-    wx.navigateTo({ url: '/pages/verify/index' });
-  },
-
   drawQrBatch(coupons) {
     if (!coupons || !coupons.length) {
       this.setData({ qrReady: false });

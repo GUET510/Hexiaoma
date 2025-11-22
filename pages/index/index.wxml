@@ -40,10 +40,4 @@
     </block>
     <view wx:else class="info-text">暂无优惠券，请联系工作人员发放。</view>
   </view>
-
-  <view class="section">
-    <view class="section-title">核销 <text class="badge">新界面</text></view>
-    <view class="info-text">进入核销页面即可扫码或手动核销优惠券。</view>
-    <button class="ghost-btn" bindtap="goVerify">前往核销</button>
-  </view>
 </view>

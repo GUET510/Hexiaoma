@@ -21,9 +21,18 @@ const findTemplate = (id) => templates.find((tpl) => tpl.id === id);
 const getGeneralCouponById = (id) =>
   db.prepare('SELECT * FROM general_coupons WHERE id = ?').get(id);
 
+const getEmployeeById = (id) => db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
+
+const getEmployeeByPhone = (phone) => db.prepare('SELECT * FROM employees WHERE phone = ?').get(phone);
+
 const nextGeneralCouponId = () => {
   const row = db.prepare('SELECT COALESCE(MAX(id), 99999) as maxId FROM general_coupons').get();
   return (row?.maxId || 99999) + 1;
+};
+
+const nextEmployeeId = () => {
+  const row = db.prepare('SELECT COALESCE(MAX(id), 999) as maxId FROM employees').get();
+  return (row?.maxId || 999) + 1;
 };
 
 const serializeGeneralCoupon = (row) => ({
@@ -190,6 +199,43 @@ app.get('/api/customers', (req, res) => {
   res.json({ customers });
 });
 
+app.get('/api/employees', (req, res) => {
+  const phone = (req.query.phone || '').trim();
+  const rows = phone
+    ? db
+        .prepare(
+          `SELECT * FROM employees WHERE phone LIKE @phone OR name LIKE @phone ORDER BY created_at DESC`
+        )
+        .all({ phone: `%${phone}%` })
+    : db.prepare('SELECT * FROM employees ORDER BY created_at DESC').all();
+
+  res.json({
+    employees: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      createdAt: row.created_at
+    }))
+  });
+});
+
+app.post('/api/employees', (req, res) => {
+  const { name, phone } = req.body || {};
+  if (!name || !phone) {
+    res.status(400).json({ message: 'name and phone are required' });
+    return;
+  }
+  const existing = getEmployeeByPhone(phone);
+  if (existing) {
+    res.status(400).json({ message: '该手机号已存在员工' });
+    return;
+  }
+  const id = nextEmployeeId();
+  db.prepare('INSERT INTO employees (id, name, phone) VALUES (?, ?, ?)').run(id, name, phone);
+  const created = getEmployeeById(id);
+  res.status(201).json({ employee: { id: created.id, name: created.name, phone: created.phone } });
+});
+
 app.post('/api/login', (req, res) => {
   const phone = (req.body.phone || '').toString();
   if (!phone) {
@@ -204,6 +250,20 @@ app.post('/api/login', (req, res) => {
     record = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
   }
   res.json({ customerId: record.id, phone: record.phone, createdAt: record.created_at });
+});
+
+app.post('/api/staff/login', (req, res) => {
+  const phone = (req.body.phone || '').toString();
+  if (!phone) {
+    res.status(400).json({ message: 'phone is required' });
+    return;
+  }
+  const employee = getEmployeeByPhone(phone);
+  if (!employee) {
+    res.status(404).json({ message: '该手机号未注册员工' });
+    return;
+  }
+  res.json({ staffId: employee.id, name: employee.name, phone: employee.phone });
 });
 
 app.get('/api/coupons', (req, res) => {
@@ -350,6 +410,35 @@ app.post('/api/coupons/verify', (req, res) => {
     return;
   }
   const coupon = db.prepare('SELECT * FROM coupons WHERE code = ? AND customer_id = ?').get(code, customerId);
+  if (!coupon) {
+    res.status(404).json({ success: false, message: '未找到该核销码' });
+    return;
+  }
+  if (coupon.status === 'used') {
+    res.status(400).json({ success: false, message: '该优惠券已核销' });
+    return;
+  }
+  db.prepare("UPDATE coupons SET status = ?, used_at = datetime('now') WHERE id = ?").run('used', coupon.id);
+  if (coupon.template_base_id) {
+    db.prepare('UPDATE general_coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.template_base_id);
+  }
+  const updated = db.prepare('SELECT * FROM coupons WHERE id = ?').get(coupon.id);
+  res.json({ success: true, coupon: serializeCoupon(updated) });
+});
+
+app.post('/api/staff/verify', (req, res) => {
+  const { staffId, code } = req.body || {};
+  const normalized = (code || '').toString().trim();
+  if (!staffId || !normalized) {
+    res.status(400).json({ message: 'staffId and code are required' });
+    return;
+  }
+  const employee = getEmployeeById(Number(staffId));
+  if (!employee) {
+    res.status(403).json({ message: '员工不存在或未授权' });
+    return;
+  }
+  const coupon = db.prepare('SELECT * FROM coupons WHERE code = ?').get(normalized);
   if (!coupon) {
     res.status(404).json({ success: false, message: '未找到该核销码' });
     return;

@@ -67,48 +67,9 @@
       </div>
 
       <div id="viewGeneral" class="card hidden">
-        <h3>通用优惠券</h3>
-        <div class="stack">
-          <div class="form-row">
-            <div>
-              <label>优惠券名称</label>
-              <input id="tplName" placeholder="请输入名称" />
-            </div>
-            <div>
-              <label>品牌</label>
-              <input id="tplBrand" placeholder="请输入品牌" />
-            </div>
-            <div>
-              <label>优惠金额</label>
-              <input id="tplAmount" type="number" min="0" placeholder="金额" />
-            </div>
-            <div>
-              <label>最低消费</label>
-              <input id="tplMinSpend" type="number" min="0" placeholder="最低消费" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div>
-              <label>有效期时长（天）</label>
-              <input id="tplDuration" type="number" min="0" placeholder="有效期（天）" />
-            </div>
-            <div>
-              <label>优惠券类型</label>
-              <select id="tplType">
-                <option value="礼品兑换券">礼品兑换券</option>
-                <option value="全场满减卷">全场满减卷</option>
-                <option value="全场折扣卷">全场折扣卷</option>
-                <option value="全场代金卷">全场代金卷</option>
-                <option value="单品代金卷">单品代金卷</option>
-                <option value="单品特价卷">单品特价卷</option>
-                <option value="单品折扣卷">单品折扣卷</option>
-              </select>
-            </div>
-            <div style="align-self:flex-end; display:flex; gap:8px;">
-              <button onclick="submitGeneralCoupon()" id="tplSubmit">创建通用优惠券</button>
-              <button class="secondary" onclick="resetGeneralForm()">重置</button>
-            </div>
-          </div>
+        <div style="display:flex; justify-content: space-between; align-items:center;">
+          <h3>通用优惠券</h3>
+          <button onclick="openGeneralCreate()">创建通用优惠券</button>
         </div>
 
         <table>
@@ -152,6 +113,58 @@
           </div>
         </div>
         <div id="issueTplList" class="grid"></div>
+      </div>
+
+      <div id="viewGeneralCreate" class="card hidden">
+        <div style="display:flex; justify-content: space-between; align-items:center;">
+          <h3>创建通用优惠券</h3>
+          <div class="actions">
+            <button class="secondary" onclick="showGeneralList()">返回列表</button>
+            <button onclick="submitGeneralCoupon()" id="tplSubmit">保存</button>
+          </div>
+        </div>
+        <div class="stack" style="margin-top:12px;">
+          <div class="form-row">
+            <div>
+              <label>优惠券名称</label>
+              <input id="tplName" placeholder="请输入名称" />
+            </div>
+            <div>
+              <label>品牌</label>
+              <input id="tplBrand" placeholder="请输入品牌" />
+            </div>
+            <div>
+              <label>优惠金额</label>
+              <input id="tplAmount" type="number" min="0" placeholder="金额" />
+            </div>
+            <div>
+              <label>最低消费</label>
+              <input id="tplMinSpend" type="number" min="0" placeholder="最低消费" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>有效期时长（天）</label>
+              <input id="tplDuration" type="number" min="0" placeholder="有效期（天）" />
+            </div>
+            <div>
+              <label>优惠券类型</label>
+              <select id="tplType">
+                <option value="礼品兑换券">礼品兑换券</option>
+                <option value="全场满减卷">全场满减卷</option>
+                <option value="全场折扣卷">全场折扣卷</option>
+                <option value="全场代金卷">全场代金卷</option>
+                <option value="单品代金卷">单品代金卷</option>
+                <option value="单品特价卷">单品特价卷</option>
+                <option value="单品折扣卷">单品折扣卷</option>
+              </select>
+            </div>
+            <div style="align-self:flex-end; display:flex; gap:8px;">
+              <button onclick="submitGeneralCoupon()">保存</button>
+              <button class="secondary" onclick="resetGeneralForm()">重置</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="viewCoupons" class="card hidden">
@@ -198,8 +211,30 @@
         document.getElementById(`view${capitalize(v)}`).classList.toggle('hidden', v !== view);
         document.getElementById(`tab${capitalize(v)}`).classList.toggle('active', v === view);
       });
-      if (view === 'general') loadGeneralCoupons();
+      if (view !== 'general') {
+        document.getElementById('viewGeneralCreate').classList.add('hidden');
+      } else {
+        document.getElementById('viewGeneral').classList.remove('hidden');
+        document.getElementById('viewGeneralCreate').classList.add('hidden');
+        loadGeneralCoupons();
+      }
       if (view === 'coupons') loadCouponsList();
+    }
+
+    function openGeneralCreate() {
+      switchView('general');
+      resetGeneralForm();
+      document.getElementById('viewGeneral').classList.add('hidden');
+      document.getElementById('viewGeneralCreate').classList.remove('hidden');
+      document.getElementById('tplName').focus();
+    }
+
+    function showGeneralList() {
+      editingTplId = null;
+      document.getElementById('viewGeneralCreate').classList.add('hidden');
+      document.getElementById('viewGeneral').classList.remove('hidden');
+      document.getElementById('tplSubmit').innerText = '保存';
+      loadGeneralCoupons();
     }
 
     function capitalize(str) {
@@ -423,6 +458,7 @@
     function startEdit(id) {
       const tpl = generalCoupons.find((t) => t.id === id);
       if (!tpl) return;
+      openGeneralCreate();
       editingTplId = id;
       document.getElementById('tplName').value = tpl.name;
       document.getElementById('tplBrand').value = tpl.brand || '';
@@ -431,7 +467,6 @@
       document.getElementById('tplDuration').value = tpl.durationDays || 0;
       document.getElementById('tplType').value = tpl.couponType;
       document.getElementById('tplSubmit').innerText = '更新通用优惠券';
-      switchView('general');
     }
 
     function resetGeneralForm() {
@@ -442,7 +477,7 @@
       document.getElementById('tplMinSpend').value = '';
       document.getElementById('tplDuration').value = '';
       document.getElementById('tplType').value = '礼品兑换券';
-      document.getElementById('tplSubmit').innerText = '创建通用优惠券';
+      document.getElementById('tplSubmit').innerText = '保存';
     }
 
     function submitGeneralCoupon() {
@@ -472,7 +507,7 @@
         .then((r) => r.json())
         .then(() => {
           resetGeneralForm();
-          loadGeneralCoupons();
+          showGeneralList();
           alert('保存成功');
         })
         .catch(() => alert('保存失败'));

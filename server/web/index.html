@@ -18,64 +18,100 @@
     .status-active { color: #07c160; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .small { font-size: 12px; color: #666; }
-    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
-    .user-list { max-height: 540px; overflow: auto; }
+    .layout { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
+    .sidebar { background: #fff; padding: 12px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+    .nav-btn { width: 100%; text-align: left; margin-bottom: 8px; background: #f5f7fa; color: #333; border: 1px solid #e4e7ed; }
+    .nav-btn.active { background: #07c160; color: #fff; border-color: #07c160; }
+    .content { min-height: 560px; }
+    .user-list { max-height: 520px; overflow: auto; }
     .user-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
     .user-meta { display: flex; flex-direction: column; gap: 2px; }
     .tag { background: #eef2ff; color: #3f51b5; padding: 2px 6px; border-radius: 6px; font-size: 12px; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
   <h1>核销券后台演示</h1>
   <div class="layout">
-    <div class="card user-list">
-      <h3>用户列表</h3>
-      <div id="customerList"></div>
-    </div>
+    <aside class="sidebar">
+      <button class="nav-btn active" id="tabCustomers" onclick="switchView('customers')">用户列表</button>
+      <button class="nav-btn" id="tabCoupons" onclick="switchView('coupons')">优惠券列表</button>
+    </aside>
 
-    <div class="card" style="min-height:520px;">
-      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
-        <div>
-          <label>客户ID</label>
-          <input id="customerId" placeholder="输入登录返回的 customerId" />
-        </div>
-        <div>
-          <label>券模板</label>
-          <select id="templateId">
-            <option value="discount200">200元优惠券</option>
-            <option value="oil500">500元油卡券</option>
-            <option value="service300">300元保养券</option>
-          </select>
-        </div>
-        <div class="actions">
-          <button onclick="generate()">生成优惠券</button>
-          <button class="secondary" onclick="refreshList()">刷新列表</button>
-        </div>
+    <div class="content">
+      <div id="viewCustomers" class="card">
+        <h3>用户列表</h3>
+        <div id="customerList" class="user-list"></div>
       </div>
-      <p class="small">可从左侧直接选择用户，也可手动填入 customerId 查看与生成优惠券。</p>
 
-      <h3>优惠券列表</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>券名称</th>
-            <th>核销码</th>
-            <th>状态</th>
-            <th>创建时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="list"></tbody>
-      </table>
+      <div id="viewCoupons" class="card hidden">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+          <div>
+            <label>选择用户</label>
+            <select id="customerSelect" onchange="onSelectCustomer(this.value)">
+              <option value="">请选择用户</option>
+            </select>
+          </div>
+          <div>
+            <label>客户ID</label>
+            <input id="customerId" placeholder="输入登录返回的 customerId" />
+          </div>
+          <div>
+            <label>券模板</label>
+            <select id="templateId">
+              <option value="discount200">200元优惠券</option>
+              <option value="oil500">500元油卡券</option>
+              <option value="service300">300元保养券</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button onclick="generate()">生成优惠券</button>
+            <button class="secondary" onclick="refreshList()">刷新列表</button>
+          </div>
+        </div>
+        <p class="small">可选择用户或手动输入 customerId 查看与生成优惠券。</p>
+
+        <h3>优惠券列表</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>券名称</th>
+              <th>核销码</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="list"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <script>
     const apiBase = '';
+    let customers = [];
+
+    function switchView(view) {
+      document.getElementById('viewCustomers').classList.toggle('hidden', view !== 'customers');
+      document.getElementById('viewCoupons').classList.toggle('hidden', view !== 'coupons');
+      document.getElementById('tabCustomers').classList.toggle('active', view === 'customers');
+      document.getElementById('tabCoupons').classList.toggle('active', view === 'coupons');
+    }
+
+    function populateCustomerSelect() {
+      const select = document.getElementById('customerSelect');
+      if (!select) return;
+      select.innerHTML = '<option value="">请选择用户</option>' + customers
+        .map(c => `<option value="${c.id}">${c.id}${c.phone ? ` / ${c.phone}` : ''}</option>`)
+        .join('');
+    }
 
     function renderCustomers(items) {
       const container = document.getElementById('customerList');
+      customers = items;
+      populateCustomerSelect();
       if (!items.length) {
         container.innerHTML = '<p class="small">暂无用户，请先在小程序登录</p>';
         return;
@@ -138,6 +174,13 @@
     }
 
     function selectCustomer(id) {
+      document.getElementById('customerId').value = id;
+      switchView('coupons');
+      refreshList();
+    }
+
+    function onSelectCustomer(id) {
+      if (!id) return;
       document.getElementById('customerId').value = id;
       refreshList();
     }

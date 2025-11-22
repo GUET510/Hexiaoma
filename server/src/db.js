@@ -1,7 +1,15 @@
-const path = require('path');
-const Database = require('better-sqlite3');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 
-const dbFile = path.join(__dirname, '..', 'data', 'hexiaoma.sqlite');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const dataDir = path.join(__dirname, '..', 'data');
+fs.mkdirSync(dataDir, { recursive: true });
+
+const dbFile = path.join(dataDir, 'hexiaoma.sqlite');
 const db = new Database(dbFile);
 
 db.pragma('journal_mode = WAL');
@@ -28,4 +36,4 @@ CREATE TABLE IF NOT EXISTS coupons (
 );
 `);
 
-module.exports = { db };
+export { db };

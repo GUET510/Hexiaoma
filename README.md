@@ -15,7 +15,7 @@ cd server
 npm install
 npm start  # 默认 http://localhost:3000
 ```
-- SQLite 数据库存放在 `server/data/hexiaoma.sqlite`，启动时自动创建表。
+- SQLite 数据库存放在 `server/data/hexiaoma.sqlite`，启动时自动创建数据目录和表。
 - 健康检查：`GET http://localhost:3000/health`。
 
 ### 2) 小程序

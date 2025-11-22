@@ -1,9 +1,13 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const { nanoid } = require('nanoid');
-const { db } = require('./db');
-const templates = require('./templates');
+import express from 'express';
+import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { nanoid } from 'nanoid';
+import { db } from './db.js';
+import templates from './templates.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -81,7 +85,7 @@ app.post('/api/coupons/verify', (req, res) => {
     res.status(400).json({ success: false, message: '该优惠券已核销' });
     return;
   }
-  db.prepare('UPDATE coupons SET status = ?, used_at = datetime(\'now\') WHERE id = ?').run('used', coupon.id);
+  db.prepare("UPDATE coupons SET status = ?, used_at = datetime('now') WHERE id = ?").run('used', coupon.id);
   const updated = db.prepare('SELECT * FROM coupons WHERE id = ?').get(coupon.id);
   res.json({ success: true, coupon: serializeCoupon(updated) });
 });
@@ -102,11 +106,12 @@ function serializeCoupon(row) {
   };
 }
 
-if (require.main === module) {
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+if (isDirectRun) {
   const port = process.env.PORT || 3000;
   app.listen(port, () => {
     console.log(`Hexiaoma backend listening on http://localhost:${port}`);
   });
 }
 
-module.exports = app;
+export default app;

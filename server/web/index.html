@@ -43,45 +43,51 @@
 </head>
 <body>
   <h1>核销券后台演示</h1>
-  <div class="card" id="authCard">
-    <h3>登录</h3>
-    <p class="small">超级管理员账号：admin / password；门店管理员与员工账号为手机号，需匹配各自密码。</p>
-    <div id="loginChooser" class="actions" style="margin-top:8px;">
-      <button onclick="chooseLogin('super')">超管登录</button>
-      <button class="secondary" onclick="chooseLogin('manager')">门店管理员登录</button>
+  <div id="authSection">
+    <div class="card" id="roleCard">
+      <h3>选择登录角色</h3>
+      <p class="small">请选择登录入口后进入账号密码输入页。</p>
+      <div class="actions" style="margin-top:8px;">
+        <button onclick="goSuperLogin()">超管登录</button>
+        <button class="secondary" onclick="goManagerLogin()">门店管理员登录</button>
+      </div>
+      <div class="small" id="sessionInfo" style="margin-top:8px;"></div>
     </div>
 
-    <div id="adminForm" class="form-row hidden">
-      <div>
-        <label>超级管理员账号</label>
-        <input id="adminUser" placeholder="admin" value="admin" />
+    <div class="card hidden" id="superLoginCard">
+      <h3>超管登录</h3>
+      <div class="form-row" style="margin-top:8px;">
+        <div>
+          <label>超级管理员账号</label>
+          <input id="adminUser" placeholder="admin" value="admin" />
+        </div>
+        <div>
+          <label>超级管理员密码</label>
+          <input id="adminPass" type="password" placeholder="password" value="password" />
+        </div>
       </div>
-      <div>
-        <label>超级管理员密码</label>
-        <input id="adminPass" type="password" placeholder="password" value="password" />
-      </div>
-      <div style="align-self:flex-end;">
-        <button onclick="adminLogin()">管理员登录</button>
-      </div>
-    </div>
-
-    <div id="managerForm" class="form-row hidden" style="margin-top:8px;">
-      <div>
-        <label>门店管理员手机号</label>
-        <input id="mgrPhone" placeholder="请输入11位手机号" />
-      </div>
-      <div>
-        <label>门店管理员密码</label>
-        <input id="mgrPass" type="password" placeholder="请输入密码" />
-      </div>
-      <div style="align-self:flex-end;">
-        <button class="secondary" onclick="managerLogin()">门店管理员登录</button>
+      <div class="actions" style="margin-top:12px;">
+        <button class="secondary" onclick="showRoleChooser()">返回</button>
+        <button onclick="adminLogin()">登录</button>
       </div>
     </div>
 
-    <div class="small" id="loginBack" style="margin-top:8px;" hidden>
-      <button class="link" onclick="showLoginChoice()">返回角色选择</button>
-      <span id="sessionInfo"></span>
+    <div class="card hidden" id="managerLoginCard">
+      <h3>门店管理员登录</h3>
+      <div class="form-row" style="margin-top:8px;">
+        <div>
+          <label>门店管理员手机号</label>
+          <input id="mgrPhone" placeholder="请输入11位手机号" />
+        </div>
+        <div>
+          <label>门店管理员密码</label>
+          <input id="mgrPass" type="password" placeholder="请输入密码" />
+        </div>
+      </div>
+      <div class="actions" style="margin-top:12px;">
+        <button class="secondary" onclick="showRoleChooser()">返回</button>
+        <button onclick="managerLogin()">登录</button>
+      </div>
     </div>
   </div>
 
@@ -407,28 +413,28 @@
       return input || null;
     }
 
-    function showLoginChoice() {
+    function showRoleChooser() {
       authMode = null;
-      document.getElementById('loginChooser').classList.remove('hidden');
-      document.getElementById('adminForm').classList.add('hidden');
-      document.getElementById('managerForm').classList.add('hidden');
-      document.getElementById('loginBack').hidden = true;
+      document.getElementById('roleCard').classList.remove('hidden');
+      document.getElementById('superLoginCard').classList.add('hidden');
+      document.getElementById('managerLoginCard').classList.add('hidden');
       renderSessionInfo();
     }
 
-    function chooseLogin(mode) {
-      authMode = mode;
-      document.getElementById('loginChooser').classList.add('hidden');
-      document.getElementById('loginBack').hidden = false;
-      if (mode === 'super') {
-        document.getElementById('adminForm').classList.remove('hidden');
-        document.getElementById('managerForm').classList.add('hidden');
-        document.getElementById('adminUser').focus();
-      } else {
-        document.getElementById('managerForm').classList.remove('hidden');
-        document.getElementById('adminForm').classList.add('hidden');
-        document.getElementById('mgrPhone').focus();
-      }
+    function goSuperLogin() {
+      authMode = 'super';
+      document.getElementById('roleCard').classList.add('hidden');
+      document.getElementById('managerLoginCard').classList.add('hidden');
+      document.getElementById('superLoginCard').classList.remove('hidden');
+      document.getElementById('adminUser').focus();
+    }
+
+    function goManagerLogin() {
+      authMode = 'manager';
+      document.getElementById('roleCard').classList.add('hidden');
+      document.getElementById('superLoginCard').classList.add('hidden');
+      document.getElementById('managerLoginCard').classList.remove('hidden');
+      document.getElementById('mgrPhone').focus();
     }
 
     function renderSessionInfo() {
@@ -447,7 +453,7 @@
     }
 
     function enterBackend(view = 'customers') {
-      document.getElementById('authCard').classList.add('hidden');
+      document.getElementById('authSection').classList.add('hidden');
       document.getElementById('mainLayout').classList.remove('hidden');
       setNavVisibility();
       const empStoreInput = document.getElementById('empStore');
@@ -1066,7 +1072,7 @@
         .catch((err) => alert(err.message || '发放失败'));
     }
 
-    showLoginChoice();
+    showRoleChooser();
   </script>
 </body>
 </html>

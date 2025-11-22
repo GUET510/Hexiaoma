@@ -7,11 +7,14 @@
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 24px; background: #f7f7f7; }
     h1 { margin-bottom: 12px; }
+    h3 { margin: 8px 0; }
     .card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin-bottom: 16px; }
     label { display: block; margin-bottom: 6px; font-weight: 600; }
     input, select, button { padding: 10px 12px; border: 1px solid #dcdfe6; border-radius: 8px; font-size: 14px; }
     button { cursor: pointer; background: #07c160; color: #fff; border: none; }
     button.secondary { background: #fff; color: #333; border: 1px solid #07c160; }
+    button.link { background: transparent; color: #07c160; border: none; padding: 6px 4px; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { text-align: left; padding: 10px; border-bottom: 1px solid #eee; }
     .status-used { color: #f56c6c; }
@@ -22,12 +25,20 @@
     .sidebar { background: #fff; padding: 12px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
     .nav-btn { width: 100%; text-align: left; margin-bottom: 8px; background: #f5f7fa; color: #333; border: 1px solid #e4e7ed; }
     .nav-btn.active { background: #07c160; color: #fff; border-color: #07c160; }
-    .content { min-height: 560px; }
+    .content { min-height: 620px; }
     .user-list { max-height: 520px; overflow: auto; }
     .user-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
     .user-meta { display: flex; flex-direction: column; gap: 2px; }
     .tag { background: #eef2ff; color: #3f51b5; padding: 2px 6px; border-radius: 6px; font-size: 12px; }
     .hidden { display: none; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+    .template-card { border: 1px solid #e4e7ed; border-radius: 10px; padding: 12px; background: #fafafa; }
+    .template-title { font-weight: 700; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .pill { padding: 3px 8px; border-radius: 999px; font-size: 12px; background: #eef2ff; color: #3f51b5; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .form-row > div { min-width: 200px; flex: 1; }
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .table-actions button { margin-right: 6px; }
   </style>
 </head>
 <body>
@@ -35,55 +46,138 @@
   <div class="layout">
     <aside class="sidebar">
       <button class="nav-btn active" id="tabCustomers" onclick="switchView('customers')">用户列表</button>
+      <button class="nav-btn" id="tabGeneral" onclick="switchView('general')">通用优惠券</button>
+      <button class="nav-btn" id="tabIssue" onclick="switchView('issue')">优惠券发放</button>
       <button class="nav-btn" id="tabCoupons" onclick="switchView('coupons')">优惠券列表</button>
     </aside>
 
     <div class="content">
       <div id="viewCustomers" class="card">
+        <div class="form-row">
+          <div>
+            <label>搜索手机号</label>
+            <input id="searchPhone" placeholder="输入手机号模糊查询" />
+          </div>
+          <div style="align-self:flex-end;">
+            <button onclick="loadCustomers(document.getElementById('searchPhone').value)">搜索</button>
+          </div>
+        </div>
         <h3>用户列表</h3>
         <div id="customerList" class="user-list"></div>
       </div>
 
-      <div id="viewCoupons" class="card hidden">
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
-          <div>
-            <label>选择用户</label>
-            <select id="customerSelect" onchange="onSelectCustomer(this.value)">
-              <option value="">请选择用户</option>
-            </select>
+      <div id="viewGeneral" class="card hidden">
+        <h3>通用优惠券</h3>
+        <div class="stack">
+          <div class="form-row">
+            <div>
+              <label>优惠券名称</label>
+              <input id="tplName" placeholder="请输入名称" />
+            </div>
+            <div>
+              <label>品牌</label>
+              <input id="tplBrand" placeholder="请输入品牌" />
+            </div>
+            <div>
+              <label>优惠金额</label>
+              <input id="tplAmount" type="number" min="0" placeholder="金额" />
+            </div>
+            <div>
+              <label>最低消费</label>
+              <input id="tplMinSpend" type="number" min="0" placeholder="最低消费" />
+            </div>
           </div>
-          <div>
-            <label>客户ID</label>
-            <input id="customerId" placeholder="输入登录返回的 customerId" />
-          </div>
-          <div>
-            <label>券模板</label>
-            <select id="templateId">
-              <option value="discount200">200元优惠券</option>
-              <option value="oil500">500元油卡券</option>
-              <option value="service300">300元保养券</option>
-            </select>
-          </div>
-          <div class="actions">
-            <button onclick="generate()">生成优惠券</button>
-            <button class="secondary" onclick="refreshList()">刷新列表</button>
+          <div class="form-row">
+            <div>
+              <label>有效期时长（天）</label>
+              <input id="tplDuration" type="number" min="0" placeholder="有效期（天）" />
+            </div>
+            <div>
+              <label>优惠券类型</label>
+              <select id="tplType">
+                <option value="礼品兑换券">礼品兑换券</option>
+                <option value="全场满减卷">全场满减卷</option>
+                <option value="全场折扣卷">全场折扣卷</option>
+                <option value="全场代金卷">全场代金卷</option>
+                <option value="单品代金卷">单品代金卷</option>
+                <option value="单品特价卷">单品特价卷</option>
+                <option value="单品折扣卷">单品折扣卷</option>
+              </select>
+            </div>
+            <div style="align-self:flex-end; display:flex; gap:8px;">
+              <button onclick="submitGeneralCoupon()" id="tplSubmit">创建通用优惠券</button>
+              <button class="secondary" onclick="resetGeneralForm()">重置</button>
+            </div>
           </div>
         </div>
-        <p class="small">可选择用户或手动输入 customerId 查看与生成优惠券。</p>
 
-        <h3>优惠券列表</h3>
         <table>
           <thead>
             <tr>
               <th>ID</th>
-              <th>券名称</th>
-              <th>核销码</th>
+              <th>名称/品牌</th>
+              <th>金额/门槛</th>
+              <th>有效期</th>
+              <th>类型</th>
               <th>状态</th>
-              <th>创建时间</th>
+              <th>数量</th>
               <th>操作</th>
             </tr>
           </thead>
-          <tbody id="list"></tbody>
+          <tbody id="generalList"></tbody>
+        </table>
+      </div>
+
+      <div id="viewIssue" class="card hidden">
+        <h3>优惠券发放</h3>
+        <div class="form-row">
+          <div>
+            <label>用户手机号</label>
+            <input id="issuePhone" placeholder="输入用户手机号" />
+          </div>
+          <div style="align-self:flex-end; display:flex; gap:8px;">
+            <button onclick="searchUser()">搜索用户</button>
+            <button class="secondary" onclick="clearSelectedUser()">清除选择</button>
+          </div>
+        </div>
+        <div id="issueUser"></div>
+
+        <div class="form-row" style="margin-top:8px;">
+          <div>
+            <label>搜索通用优惠券</label>
+            <input id="issueTplSearch" placeholder="名称或品牌关键词" oninput="renderIssueTemplates()" />
+          </div>
+          <div style="align-self:flex-end;">
+            <button class="secondary" onclick="loadGeneralCoupons()">刷新模板</button>
+          </div>
+        </div>
+        <div id="issueTplList" class="grid"></div>
+      </div>
+
+      <div id="viewCoupons" class="card hidden">
+        <div class="form-row">
+          <div>
+            <label>搜索优惠券</label>
+            <input id="couponSearch" placeholder="输入优惠券ID/手机号/名称" />
+          </div>
+          <div style="align-self:flex-end;">
+            <button onclick="loadCouponsList()">搜索</button>
+          </div>
+        </div>
+        <h3>优惠券列表</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>优惠券ID</th>
+              <th>名称</th>
+              <th>用户ID</th>
+              <th>手机号</th>
+              <th>有效期时长</th>
+              <th>可用门店</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="couponTable"></tbody>
         </table>
       </div>
     </div>
@@ -92,26 +186,33 @@
   <script>
     const apiBase = '';
     let customers = [];
+    let generalCoupons = [];
+    let editingTplId = null;
+    let selectedCustomer = null;
+    let issueSearchResults = [];
+
+    const views = ['customers', 'general', 'issue', 'coupons'];
 
     function switchView(view) {
-      document.getElementById('viewCustomers').classList.toggle('hidden', view !== 'customers');
-      document.getElementById('viewCoupons').classList.toggle('hidden', view !== 'coupons');
-      document.getElementById('tabCustomers').classList.toggle('active', view === 'customers');
-      document.getElementById('tabCoupons').classList.toggle('active', view === 'coupons');
+      views.forEach((v) => {
+        document.getElementById(`view${capitalize(v)}`).classList.toggle('hidden', v !== view);
+        document.getElementById(`tab${capitalize(v)}`).classList.toggle('active', v === view);
+      });
+      if (view === 'general') loadGeneralCoupons();
+      if (view === 'coupons') loadCouponsList();
     }
 
-    function populateCustomerSelect() {
-      const select = document.getElementById('customerSelect');
-      if (!select) return;
-      select.innerHTML = '<option value="">请选择用户</option>' + customers
-        .map(c => `<option value="${c.id}">${c.id}${c.phone ? ` / ${c.phone}` : ''}</option>`)
-        .join('');
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function populateCustomerSelectList(items) {
+      customers = items;
+      renderCustomers(items);
     }
 
     function renderCustomers(items) {
       const container = document.getElementById('customerList');
-      customers = items;
-      populateCustomerSelect();
       if (!items.length) {
         container.innerHTML = '<p class="small">暂无用户，请先在小程序登录</p>';
         return;
@@ -130,90 +231,328 @@
                 <span class="tag">已核销 ${u.usedCount}</span>
               </div>
             </div>
-            <button class="secondary" onclick="selectCustomer(${u.id})">查看</button>
+            <div class="actions">
+              <button class="secondary" onclick="selectCustomer(${u.id}, '${u.phone || ''}')">查看</button>
+              <button class="secondary" onclick="goIssueForUser(${u.id}, '${u.phone || ''}')">发放</button>
+            </div>
           </div>
         `
         )
         .join('');
     }
 
-    function renderRows(items) {
-      const tbody = document.getElementById('list');
+    function renderGeneralList(items) {
+      const tbody = document.getElementById('generalList');
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="6">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8">暂无通用优惠券</td></tr>';
         return;
       }
-      tbody.innerHTML = items.map(item => `
-        <tr>
-          <td>${item.id}</td>
-          <td>${item.title}</td>
-          <td>${item.code}</td>
-          <td class="${item.status === 'used' ? 'status-used' : 'status-active'}">${item.statusLabel}</td>
-          <td>${item.createdAt || ''}</td>
-          <td><button class="secondary" onclick="verify('${item.code}')">核销</button></td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = items
+        .map(
+          (tpl) => `
+          <tr>
+            <td>${tpl.id}</td>
+            <td>
+              <div>${tpl.name}</div>
+              <div class="small">${tpl.brand || '未设置'}</div>
+            </td>
+            <td>${tpl.amount} 元 / 满 ${tpl.minSpend || 0}</td>
+            <td>${tpl.durationDays || 0} 天</td>
+            <td>${tpl.couponType}</td>
+            <td>${tpl.status === 'inactive' ? '下架' : '上架中'}</td>
+            <td>发放 ${tpl.issuedCount} · 核销 ${tpl.usedCount} · 锁定 ${tpl.lockedCount}</td>
+            <td class="table-actions">
+              <button class="link" onclick="openIssueFromTemplate(${tpl.id})">领取</button>
+              <button class="link" onclick="startEdit(${tpl.id})">修改</button>
+              <button class="link" onclick="toggleTemplate(${tpl.id})">${tpl.status === 'inactive' ? '上架' : '下架'}</button>
+              <button class="link" onclick="duplicateTemplate(${tpl.id})">复制</button>
+            </td>
+          </tr>
+        `
+        )
+        .join('');
     }
 
-    function refreshList() {
-      const customerId = document.getElementById('customerId').value.trim();
-      if (!customerId) return alert('请先填写 customerId');
-      fetch(`${apiBase}/api/coupons?customerId=${customerId}`)
-        .then(r => r.json())
-        .then(data => renderRows(data.coupons || []))
-        .catch(() => alert('获取列表失败'));
+    function renderIssueUser() {
+      const container = document.getElementById('issueUser');
+      const list = issueSearchResults || [];
+      let html = '';
+      if (selectedCustomer) {
+        html += `<p class="small">已选择用户：ID ${selectedCustomer.id}${selectedCustomer.phone ? ' / ' + selectedCustomer.phone : ''}</p>`;
+      } else {
+        html += '<p class="small">请先搜索并选择用户，或直接输入手机号发放</p>';
+      }
+
+      if (list.length) {
+        html += '<div class="small" style="margin-top:6px;">搜索结果：</div>';
+        html += list
+          .map(
+            (u) => `
+              <div class="user-row" style="padding:6px 0;">
+                <div class="user-meta">
+                  <strong>ID：${u.id}</strong>
+                  <span class="small">手机号：${u.phone || '未留存'}</span>
+                </div>
+                <button class="secondary" onclick="chooseIssueUser(${u.id}, '${u.phone || ''}')">选择</button>
+              </div>
+            `
+          )
+          .join('');
+      }
+      container.innerHTML = html;
     }
 
-    function loadCustomers() {
-      fetch(`${apiBase}/api/customers`)
-        .then(r => r.json())
-        .then((data) => renderCustomers(data.customers || []))
+    function renderIssueTemplates() {
+      const container = document.getElementById('issueTplList');
+      const keyword = (document.getElementById('issueTplSearch').value || '').trim();
+      const filtered = keyword
+        ? generalCoupons.filter((tpl) => tpl.name.includes(keyword) || (tpl.brand || '').includes(keyword))
+        : generalCoupons;
+      if (!filtered.length) {
+        container.innerHTML = '<p class="small">暂无匹配的通用优惠券</p>';
+        return;
+      }
+      container.innerHTML = filtered
+        .map(
+          (tpl) => `
+          <div class="template-card">
+            <div class="template-title">
+              <span>${tpl.name}</span>
+              <span class="pill">${tpl.couponType}</span>
+            </div>
+            <div class="small">品牌：${tpl.brand || '未设置'} · 金额：${tpl.amount} · 门槛：${tpl.minSpend || 0}</div>
+            <div class="small">有效期：${tpl.durationDays || 0} 天 · 状态：${tpl.status === 'inactive' ? '下架' : '上架'}</div>
+            <div class="small">发放：${tpl.issuedCount} / 核销：${tpl.usedCount}</div>
+            <div class="form-row" style="margin-top:8px; align-items:center;">
+              <div style="flex:1;">
+                <label class="small">发放数量</label>
+                <input id="qty-${tpl.id}" type="number" min="0" value="0" style="width:100%;" />
+              </div>
+              <button style="margin-top:20px;" onclick="issueForTemplate(${tpl.id})">发放</button>
+            </div>
+          </div>
+        `
+        )
+        .join('');
+    }
+
+    function renderCoupons(items) {
+      const tbody = document.getElementById('couponTable');
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="7">暂无数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items
+        .map(
+          (item) => `
+          <tr>
+            <td>${item.serial || item.code}</td>
+            <td>${item.title}</td>
+            <td>${item.customerId}</td>
+            <td>${item.customerPhone || ''}</td>
+            <td>${item.durationDays || 0} 天</td>
+            <td>${item.storeScope || '全部门店'}</td>
+            <td class="${item.status === 'used' ? 'status-used' : 'status-active'}">${item.statusLabel}</td>
+          </tr>
+        `
+        )
+        .join('');
+    }
+
+    function loadCustomers(phone = '') {
+      const query = phone ? `?phone=${encodeURIComponent(phone)}` : '';
+      fetch(`${apiBase}/api/customers${query}`)
+        .then((r) => r.json())
+        .then((data) => populateCustomerSelectList(data.customers || []))
         .catch(() => {
           document.getElementById('customerList').innerHTML = '<p class="small">加载用户失败</p>';
         });
     }
 
-    function selectCustomer(id) {
-      document.getElementById('customerId').value = id;
-      switchView('coupons');
-      refreshList();
-    }
-
-    function onSelectCustomer(id) {
-      if (!id) return;
-      document.getElementById('customerId').value = id;
-      refreshList();
-    }
-
-    function generate() {
-      const customerId = document.getElementById('customerId').value.trim();
-      const templateId = document.getElementById('templateId').value;
-      if (!customerId) return alert('请先填写 customerId');
-      fetch(`${apiBase}/api/coupons`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId, templateId })
-      }).then(r => r.json())
-        .then(() => refreshList())
-        .catch(() => alert('生成失败'));
-    }
-
-    function verify(code) {
-      const customerId = document.getElementById('customerId').value.trim();
-      if (!customerId) return alert('请先填写 customerId');
-      fetch(`${apiBase}/api/coupons/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId, code })
-      }).then(r => r.json())
-        .then((res) => {
-          alert(res.success ? '核销成功' : (res.message || '核销失败'));
-          refreshList();
+    function loadGeneralCoupons() {
+      fetch(`${apiBase}/api/general-coupons`)
+        .then((r) => r.json())
+        .then((data) => {
+          generalCoupons = data.templates || [];
+          renderGeneralList(generalCoupons);
+          renderIssueTemplates();
         })
-        .catch(() => alert('核销失败'));
+        .catch(() => {
+          document.getElementById('generalList').innerHTML = '<tr><td colspan="8">加载失败</td></tr>';
+        });
     }
 
+    function loadCouponsList() {
+      const q = document.getElementById('couponSearch').value.trim();
+      const query = q ? `?query=${encodeURIComponent(q)}` : '';
+      fetch(`${apiBase}/api/admin/coupons${query}`)
+        .then((r) => r.json())
+        .then((data) => renderCoupons(data.coupons || []))
+        .catch(() => {
+          document.getElementById('couponTable').innerHTML = '<tr><td colspan="7">加载失败</td></tr>';
+        });
+    }
+
+    function selectCustomer(id, phone = '') {
+      document.getElementById('couponSearch').value = '';
+      document.getElementById('issuePhone').value = phone || '';
+      selectedCustomer = { id, phone };
+      switchView('coupons');
+      loadCouponsList();
+    }
+
+    function goIssueForUser(id, phone = '') {
+      selectedCustomer = { id, phone };
+      document.getElementById('issuePhone').value = phone || '';
+      issueSearchResults = [];
+      renderIssueUser();
+      switchView('issue');
+    }
+
+    function openIssueFromTemplate(id) {
+      const tpl = generalCoupons.find((t) => t.id === id);
+      if (tpl) {
+        document.getElementById('issueTplSearch').value = tpl.name;
+      }
+      issueSearchResults = [];
+      renderIssueTemplates();
+      renderIssueUser();
+      switchView('issue');
+    }
+
+    function startEdit(id) {
+      const tpl = generalCoupons.find((t) => t.id === id);
+      if (!tpl) return;
+      editingTplId = id;
+      document.getElementById('tplName').value = tpl.name;
+      document.getElementById('tplBrand').value = tpl.brand || '';
+      document.getElementById('tplAmount').value = tpl.amount;
+      document.getElementById('tplMinSpend').value = tpl.minSpend || 0;
+      document.getElementById('tplDuration').value = tpl.durationDays || 0;
+      document.getElementById('tplType').value = tpl.couponType;
+      document.getElementById('tplSubmit').innerText = '更新通用优惠券';
+      switchView('general');
+    }
+
+    function resetGeneralForm() {
+      editingTplId = null;
+      document.getElementById('tplName').value = '';
+      document.getElementById('tplBrand').value = '';
+      document.getElementById('tplAmount').value = '';
+      document.getElementById('tplMinSpend').value = '';
+      document.getElementById('tplDuration').value = '';
+      document.getElementById('tplType').value = '礼品兑换券';
+      document.getElementById('tplSubmit').innerText = '创建通用优惠券';
+    }
+
+    function submitGeneralCoupon() {
+      const payload = {
+        name: document.getElementById('tplName').value.trim(),
+        brand: document.getElementById('tplBrand').value.trim(),
+        amount: Number(document.getElementById('tplAmount').value),
+        minSpend: Number(document.getElementById('tplMinSpend').value) || 0,
+        durationDays: Number(document.getElementById('tplDuration').value) || 0,
+        couponType: document.getElementById('tplType').value
+      };
+      const url = editingTplId ? `${apiBase}/api/general-coupons/${editingTplId}` : `${apiBase}/api/general-coupons`;
+      const method = editingTplId ? 'PUT' : 'POST';
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then((r) => r.json())
+        .then(() => {
+          resetGeneralForm();
+          loadGeneralCoupons();
+          alert('保存成功');
+        })
+        .catch(() => alert('保存失败'));
+    }
+
+    function toggleTemplate(id) {
+      const tpl = generalCoupons.find((t) => t.id === id);
+      if (tpl && tpl.status === 'inactive') {
+        fetch(`${apiBase}/api/general-coupons/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'active' })
+        })
+          .then((r) => r.json())
+          .then(() => loadGeneralCoupons())
+          .catch(() => alert('上架失败'));
+        return;
+      }
+      fetch(`${apiBase}/api/general-coupons/${id}/down`, { method: 'POST' })
+        .then((r) => r.json())
+        .then(() => loadGeneralCoupons())
+        .catch(() => alert('下架失败'));
+    }
+
+    function duplicateTemplate(id) {
+      fetch(`${apiBase}/api/general-coupons/${id}/duplicate`, { method: 'POST' })
+        .then((r) => r.json())
+        .then(() => loadGeneralCoupons())
+        .catch(() => alert('复制失败'));
+    }
+
+    function searchUser() {
+      const phone = document.getElementById('issuePhone').value.trim();
+      const query = phone ? `?phone=${encodeURIComponent(phone)}` : '';
+      fetch(`${apiBase}/api/customers${query}`)
+        .then((r) => r.json())
+        .then((data) => {
+          issueSearchResults = data.customers || [];
+          selectedCustomer = null;
+          renderIssueUser();
+        })
+        .catch(() => {
+          issueSearchResults = [];
+          renderIssueUser();
+        });
+    }
+
+    function clearSelectedUser() {
+      selectedCustomer = null;
+      issueSearchResults = [];
+      renderIssueUser();
+    }
+
+    function chooseIssueUser(id, phone = '') {
+      selectedCustomer = { id, phone };
+      renderIssueUser();
+    }
+
+    function issueForTemplate(id) {
+      const qtyInput = document.getElementById(`qty-${id}`);
+      const qty = Number(qtyInput.value) || 0;
+      if (qty <= 0) return alert('请输入发放数量');
+      const phone = document.getElementById('issuePhone').value.trim();
+      const payload = {
+        templateId: id,
+        quantity: qty,
+        customerId: selectedCustomer ? selectedCustomer.id : undefined,
+        phone: phone || undefined
+      };
+      fetch(`${apiBase}/api/issue-coupons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then((r) => r.json())
+        .then(() => {
+          loadGeneralCoupons();
+          loadCouponsList();
+          alert('发放成功');
+        })
+        .catch(() => alert('发放失败'));
+    }
+
+    switchView('customers');
     loadCustomers();
+    loadGeneralCoupons();
+    renderIssueUser();
+    loadCouponsList();
   </script>
 </body>
 </html>

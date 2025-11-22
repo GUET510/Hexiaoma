@@ -43,6 +43,37 @@
 </head>
 <body>
   <h1>核销券后台演示</h1>
+  <div class="card" id="authCard">
+    <h3>登录</h3>
+    <p class="small">超级管理员账号：admin / password；门店管理员与员工账号为手机号，需匹配各自密码。</p>
+    <div class="form-row">
+      <div>
+        <label>超级管理员账号</label>
+        <input id="adminUser" placeholder="admin" value="admin" />
+      </div>
+      <div>
+        <label>超级管理员密码</label>
+        <input id="adminPass" type="password" placeholder="password" value="password" />
+      </div>
+      <div style="align-self:flex-end;">
+        <button onclick="adminLogin()">管理员登录</button>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:8px;">
+      <div>
+        <label>门店管理员手机号</label>
+        <input id="mgrPhone" placeholder="请输入11位手机号" />
+      </div>
+      <div>
+        <label>门店管理员密码</label>
+        <input id="mgrPass" type="password" placeholder="请输入密码" />
+      </div>
+      <div style="align-self:flex-end;">
+        <button class="secondary" onclick="managerLogin()">门店管理员登录</button>
+      </div>
+    </div>
+    <p id="sessionInfo" class="small"></p>
+  </div>
   <div class="layout">
     <aside class="sidebar">
       <button class="nav-btn active" id="tabCustomers" onclick="switchView('customers')">用户列表</button>
@@ -50,6 +81,7 @@
       <button class="nav-btn" id="tabGeneral" onclick="switchView('general')">通用优惠券</button>
       <button class="nav-btn" id="tabIssue" onclick="switchView('issue')">优惠券发放</button>
       <button class="nav-btn" id="tabCoupons" onclick="switchView('coupons')">优惠券列表</button>
+      <button class="nav-btn" id="tabStores" onclick="switchView('stores')">门店管理</button>
     </aside>
 
     <div class="content">
@@ -77,6 +109,14 @@
             <label>员工手机号</label>
             <input id="empPhone" placeholder="请输入手机号" />
           </div>
+          <div>
+            <label>所属门店ID</label>
+            <input id="empStore" placeholder="门店ID" />
+          </div>
+          <div>
+            <label>登录密码</label>
+            <input id="empPassword" type="password" placeholder="请输入密码" />
+          </div>
           <div style="align-self:flex-end; display:flex; gap:8px;">
             <button onclick="createEmployee()">新增员工</button>
             <button class="secondary" onclick="loadEmployees()">刷新列表</button>
@@ -98,6 +138,8 @@
               <th>ID</th>
               <th>姓名</th>
               <th>手机号</th>
+              <th>门店</th>
+              <th>工号</th>
               <th>创建时间</th>
             </tr>
           </thead>
@@ -178,6 +220,10 @@
               <input id="tplStore" placeholder="例：全部门店/XX门店" />
             </div>
             <div>
+              <label>门店ID（可选）</label>
+              <input id="tplStoreId" placeholder="门店ID，超级管理员可填" />
+            </div>
+            <div>
               <label>优惠金额</label>
               <input id="tplAmount" type="number" min="0" placeholder="金额" />
             </div>
@@ -237,6 +283,54 @@
           <tbody id="couponTable"></tbody>
         </table>
       </div>
+
+      <div id="viewStores" class="card hidden">
+        <div style="display:flex; justify-content: space-between; align-items:center;">
+          <h3>门店管理（仅超级管理员）</h3>
+          <button class="secondary" onclick="loadStores()">刷新</button>
+        </div>
+        <div class="form-row" style="margin-top:8px;">
+          <div>
+            <label>门店名称</label>
+            <input id="storeName" placeholder="请输入门店名称" />
+          </div>
+          <div style="align-self:flex-end;">
+            <button onclick="createStore()">创建门店</button>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:8px;">
+          <div>
+            <label>选择门店</label>
+            <select id="managerStore"></select>
+          </div>
+          <div>
+            <label>门店管理员姓名</label>
+            <input id="managerName" placeholder="请输入姓名" />
+          </div>
+          <div>
+            <label>门店管理员手机号</label>
+            <input id="managerPhone" placeholder="11位手机号" />
+          </div>
+          <div>
+            <label>登录密码</label>
+            <input id="managerPassword" type="password" placeholder="请输入密码" />
+          </div>
+          <div style="align-self:flex-end;">
+            <button onclick="createStoreManager()">创建门店管理员</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>门店ID</th>
+              <th>名称</th>
+              <th>管理员账号</th>
+              <th>创建时间</th>
+            </tr>
+          </thead>
+          <tbody id="storeTable"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -248,8 +342,12 @@
     let editingTplId = null;
     let selectedCustomer = null;
     let issueSearchResults = [];
+    let stores = [];
+    let sessionRole = null;
+    let currentStoreId = null;
+    let currentManager = null;
 
-    const views = ['customers', 'employees', 'general', 'issue', 'coupons'];
+    const views = ['customers', 'employees', 'general', 'issue', 'coupons', 'stores'];
 
     function switchView(view) {
       views.forEach((v) => {
@@ -265,6 +363,7 @@
       }
       if (view === 'employees') loadEmployees();
       if (view === 'coupons') loadCouponsList();
+      if (view === 'stores') loadStores();
     }
 
     function openGeneralCreate() {
@@ -285,6 +384,74 @@
 
     function capitalize(str) {
       return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function isValidPhone(phone) {
+      return /^\d{11}$/.test((phone || '').toString());
+    }
+
+    function renderSessionInfo() {
+      const info = document.getElementById('sessionInfo');
+      if (sessionRole === 'super') {
+        info.innerText = '当前角色：超级管理员';
+      } else if (sessionRole === 'manager') {
+        info.innerText = `当前角色：门店管理员（门店 ${currentStoreId || ''}，${currentManager?.name || ''}）`;
+      } else {
+        info.innerText = '未登录';
+      }
+    }
+
+    async function adminLogin() {
+      const username = document.getElementById('adminUser').value;
+      const password = document.getElementById('adminPass').value;
+      const res = await fetch(`${apiBase}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (res.ok) {
+        sessionRole = 'super';
+        currentStoreId = null;
+        currentManager = null;
+        renderSessionInfo();
+        loadStores();
+      } else {
+        alert('管理员账号或密码错误');
+      }
+    }
+
+    async function managerLogin() {
+      const phone = document.getElementById('mgrPhone').value.trim();
+      const password = document.getElementById('mgrPass').value;
+      if (!isValidPhone(phone)) {
+        alert('手机号必须为11位');
+        return;
+      }
+      const res = await fetch(`${apiBase}/api/manager/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        sessionRole = 'manager';
+        currentStoreId = data.storeId;
+        currentManager = data;
+        renderSessionInfo();
+        loadEmployees();
+        loadGeneralCoupons();
+        loadCouponsList();
+        loadCustomers();
+      } else {
+        alert('门店管理员账号或密码错误');
+      }
+    }
+
+    function storeQuery(base = '') {
+      if (sessionRole === 'manager' && currentStoreId) {
+        return base ? `${base}&storeId=${currentStoreId}` : `?storeId=${currentStoreId}`;
+      }
+      return base || '';
     }
 
     function populateCustomerSelectList(items) {
@@ -325,7 +492,7 @@
     function renderEmployees(items) {
       const tbody = document.getElementById('employeeTable');
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="4">暂无员工，请先新增</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6">暂无员工，请先新增</td></tr>';
         return;
       }
       tbody.innerHTML = items
@@ -335,6 +502,8 @@
             <td>${emp.id}</td>
             <td>${emp.name}</td>
             <td>${emp.phone}</td>
+            <td>${emp.storeId || ''}</td>
+            <td>${emp.staffCode || ''}</td>
             <td>${emp.createdAt || ''}</td>
           </tr>
         `
@@ -373,6 +542,33 @@
         `
         )
         .join('');
+    }
+
+    function renderStoresTable(list) {
+      const tbody = document.getElementById('storeTable');
+      if (!tbody) return;
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="4">暂无门店</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list
+        .map(
+          (s) => `
+          <tr>
+            <td>${s.id}</td>
+            <td>${s.name}</td>
+            <td>${s.managerPhone || ''} ${s.managerId ? '(' + s.managerId + ')' : ''}</td>
+            <td>${s.createdAt || ''}</td>
+          </tr>
+        `
+        )
+        .join('');
+    }
+
+    function renderStoreOptions(list = stores) {
+      const select = document.getElementById('managerStore');
+      if (!select) return;
+      select.innerHTML = list.map((s) => `<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
     }
 
     function renderIssueUser() {
@@ -462,7 +658,7 @@
     }
 
     function loadCustomers(phone = '') {
-      const query = phone ? `?phone=${encodeURIComponent(phone)}` : '';
+      const query = storeQuery(phone ? `?phone=${encodeURIComponent(phone)}` : '');
       fetch(`${apiBase}/api/customers${query}`)
         .then((r) => r.json())
         .then((data) => populateCustomerSelectList(data.customers || []))
@@ -473,7 +669,7 @@
 
     function loadEmployees() {
       const phone = document.getElementById('empSearch')?.value || '';
-      const query = phone ? `?phone=${encodeURIComponent(phone.trim())}` : '';
+      const query = storeQuery(phone ? `?phone=${encodeURIComponent(phone.trim())}` : '');
       fetch(`${apiBase}/api/employees${query}`)
         .then((r) => r.json())
         .then((data) => {
@@ -486,7 +682,8 @@
     }
 
     function loadGeneralCoupons() {
-      fetch(`${apiBase}/api/general-coupons`)
+      const query = storeQuery('');
+      fetch(`${apiBase}/api/general-coupons${query}`)
         .then((r) => r.json())
         .then((data) => {
           generalCoupons = data.templates || [];
@@ -500,7 +697,7 @@
 
     function loadCouponsList() {
       const q = document.getElementById('couponSearch').value.trim();
-      const query = q ? `?query=${encodeURIComponent(q)}` : '';
+      const query = storeQuery(q ? `?query=${encodeURIComponent(q)}` : '');
       fetch(`${apiBase}/api/admin/coupons${query}`)
         .then((r) => r.json())
         .then((data) => renderCoupons(data.coupons || []))
@@ -539,14 +736,21 @@
     function createEmployee() {
       const name = document.getElementById('empName').value.trim();
       const phone = document.getElementById('empPhone').value.trim();
-      if (!name || !phone) {
-        alert('请填写员工姓名和手机号');
+      const storeInput = Number(document.getElementById('empStore').value);
+      const password = document.getElementById('empPassword').value;
+      const storeId = ensureManagerStore(storeInput);
+      if (!name || !phone || !storeId) {
+        alert('请填写员工姓名、手机号和门店');
+        return;
+      }
+      if (!isValidPhone(phone)) {
+        alert('手机号必须为11位');
         return;
       }
       fetch(`${apiBase}/api/employees`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone })
+        body: JSON.stringify({ name, phone, storeId, password })
       })
         .then((r) => {
           if (!r.ok) return r.json().then((d) => Promise.reject(d.message || '创建失败'));
@@ -555,6 +759,8 @@
         .then(() => {
           document.getElementById('empName').value = '';
           document.getElementById('empPhone').value = '';
+          document.getElementById('empStore').value = '';
+          document.getElementById('empPassword').value = '';
           loadEmployees();
           alert('员工创建成功');
         })
@@ -571,6 +777,7 @@
       document.getElementById('tplName').value = tpl.name;
       document.getElementById('tplBrand').value = tpl.brand || '';
       document.getElementById('tplStore').value = tpl.storeScope || '';
+      document.getElementById('tplStoreId').value = tpl.storeId || '';
       document.getElementById('tplAmount').value = tpl.amount;
       document.getElementById('tplMinSpend').value = tpl.minSpend || 0;
       document.getElementById('tplDuration').value = tpl.durationDays || 0;
@@ -583,6 +790,7 @@
       document.getElementById('tplName').value = '';
       document.getElementById('tplBrand').value = '';
       document.getElementById('tplStore').value = '';
+      document.getElementById('tplStoreId').value = '';
       document.getElementById('tplAmount').value = '';
       document.getElementById('tplMinSpend').value = '';
       document.getElementById('tplDuration').value = '';
@@ -593,6 +801,8 @@
     function submitGeneralCoupon() {
       const name = document.getElementById('tplName').value.trim();
       const amount = Number(document.getElementById('tplAmount').value);
+      const storeIdInput = Number(document.getElementById('tplStoreId').value);
+      const storeId = ensureManagerStore(storeIdInput) || storeIdInput || undefined;
       if (!name || !amount || Number.isNaN(amount) || amount <= 0) {
         switchView('general');
         document.getElementById('tplName').focus();
@@ -603,6 +813,7 @@
         name,
         brand: document.getElementById('tplBrand').value.trim(),
         storeScope: document.getElementById('tplStore').value.trim(),
+        storeId,
         amount,
         minSpend: Number(document.getElementById('tplMinSpend').value) || 0,
         durationDays: Number(document.getElementById('tplDuration').value) || 0,
@@ -652,7 +863,11 @@
 
     function searchUser() {
       const phone = document.getElementById('issuePhone').value.trim();
-      const query = phone ? `?phone=${encodeURIComponent(phone)}` : '';
+      if (phone && !isValidPhone(phone)) {
+        alert('手机号必须为11位');
+        return;
+      }
+      const query = storeQuery(phone ? `?phone=${encodeURIComponent(phone)}` : '');
       fetch(`${apiBase}/api/customers${query}`)
         .then((r) => r.json())
         .then((data) => {
@@ -677,16 +892,86 @@
       renderIssueUser();
     }
 
+    function loadStores() {
+      if (sessionRole !== 'super') {
+        renderStoresTable([]);
+        renderStoreOptions([]);
+        return;
+      }
+      fetch(`${apiBase}/api/admin/stores`)
+        .then((r) => r.json())
+        .then((data) => {
+          stores = data.stores || [];
+          renderStoresTable(stores);
+          renderStoreOptions(stores);
+        })
+        .catch(() => {
+          document.getElementById('storeTable').innerHTML = '<tr><td colspan="4">加载失败</td></tr>';
+        });
+    }
+
+    async function createStore() {
+      if (sessionRole !== 'super') return alert('仅超级管理员可以创建门店');
+      const name = document.getElementById('storeName').value.trim();
+      if (!name) return alert('请输入门店名称');
+      const res = await fetch(`${apiBase}/api/admin/stores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (res.ok) {
+        document.getElementById('storeName').value = '';
+        loadStores();
+      } else {
+        alert('创建门店失败');
+      }
+    }
+
+    async function createStoreManager() {
+      if (sessionRole !== 'super') return alert('仅超级管理员可以创建门店管理员');
+      const storeId = Number(document.getElementById('managerStore').value);
+      const name = document.getElementById('managerName').value.trim();
+      const phone = document.getElementById('managerPhone').value.trim();
+      const password = document.getElementById('managerPassword').value;
+      if (!storeId || !name || !phone || !password) {
+        alert('请填写完整门店管理员信息');
+        return;
+      }
+      if (!isValidPhone(phone)) {
+        alert('手机号必须为11位');
+        return;
+      }
+      const res = await fetch(`${apiBase}/api/admin/store-managers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId, name, phone, password })
+      });
+      if (res.ok) {
+        document.getElementById('managerName').value = '';
+        document.getElementById('managerPhone').value = '';
+        document.getElementById('managerPassword').value = '';
+        loadStores();
+      } else {
+        const msg = await res.json().catch(() => ({}));
+        alert(msg.message || '创建失败');
+      }
+    }
+
     function issueForTemplate(id) {
       const qtyInput = document.getElementById(`qty-${id}`);
       const qty = Number(qtyInput.value) || 0;
       if (qty <= 0) return alert('请输入发放数量');
       const phone = document.getElementById('issuePhone').value.trim();
+      if (phone && !isValidPhone(phone)) {
+        alert('手机号必须为11位');
+        return;
+      }
       const payload = {
         templateId: id,
         quantity: qty,
         customerId: selectedCustomer ? selectedCustomer.id : undefined,
-        phone: phone || undefined
+        phone: phone || undefined,
+        storeId: sessionRole === 'manager' ? currentStoreId : undefined
       };
       fetch(`${apiBase}/api/issue-coupons`, {
         method: 'POST',
@@ -708,6 +993,7 @@
         .catch((err) => alert(err.message || '发放失败'));
     }
 
+    renderSessionInfo();
     switchView('customers');
     loadCustomers();
     loadGeneralCoupons();

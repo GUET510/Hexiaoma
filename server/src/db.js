@@ -25,7 +25,26 @@ CREATE TABLE IF NOT EXISTS employees (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   phone TEXT NOT NULL UNIQUE,
+  store_id INTEGER,
+  staff_code TEXT UNIQUE,
+  password TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS stores (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS store_managers (
+  id TEXT PRIMARY KEY,
+  store_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL UNIQUE,
+  password TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(store_id) REFERENCES stores(id)
 );
 
 CREATE TABLE IF NOT EXISTS general_coupons (
@@ -87,5 +106,10 @@ ensureColumn('coupons', 'template_base_id', 'INTEGER');
 ensureColumn('coupons', 'serial', 'TEXT UNIQUE');
 ensureColumn('coupons', 'store_scope', 'TEXT');
 ensureColumn('general_coupons', 'store_scope', 'TEXT');
+ensureColumn('general_coupons', 'store_id', 'INTEGER');
+ensureColumn('coupons', 'store_id', 'INTEGER');
+ensureColumn('employees', 'store_id', 'INTEGER');
+ensureColumn('employees', 'staff_code', 'TEXT UNIQUE');
+ensureColumn('employees', 'password', 'TEXT');
 
 export { db };

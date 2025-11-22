@@ -42,6 +42,10 @@ Page({
       wx.showToast({ title: '请先输入手机号', icon: 'none' });
       return;
     }
+    if (manualPhone.length !== 11) {
+      wx.showToast({ title: '手机号需为11位', icon: 'none' });
+      return;
+    }
     this.registerCustomer(manualPhone);
   },
 

@@ -5,7 +5,12 @@
 ## 功能概览
 - **用户端**：手机号授权登录后仅展示已发放的优惠券二维码/有效期/门店等信息，不再提供用户自助核销入口。
 - **员工端**：从登录页底部进入员工登录，支持手机号授权/手输，校验该手机号是否为员工，登录后进入专属核销工具（扫码或手动核销）。
-- **后台管理**：SQLite 持久化客户、员工、优惠券、通用券；Web 端支持通用优惠券创建/发放、员工管理（ID 从 1000 递增）、查看优惠券列表等。
+- **后台管理**：SQLite 持久化客户、员工、优惠券、通用券；Web 端支持通用优惠券创建/发放、员工/门店管理、查看优惠券列表等。
+
+### 权限与角色
+- **超级管理员**：账号 `admin` / 密码 `password`，可创建门店（ID 从 101 起自动递增）及对应门店管理员（账号形如 `门店ID_001`，手机号需 11 位，密码自定义）。
+- **门店管理员**：使用 11 位手机号 + 密码登录 Web 端，仅查看本门店的用户、通用券、优惠券、员工列表，并可为本门店创建员工（工号形如 `门店ID_002` 递增，手机号 11 位，密码自定义）。
+- **员工**：由门店管理员创建，使用手机号 + 密码在小程序“员工登录”页登录，仅进行优惠券核销。
 
 ## 启动步骤
 ### 1) 后端服务
@@ -29,7 +34,7 @@ npm start  # 默认 http://localhost:3000
 ### 3) Web 后台（示例）
 - 启动后端后，访问 `http://localhost:3000` 即可打开管理页：
   - **用户列表**：按手机号搜索或直接浏览用户，并跳转查看/发放。
-  - **员工列表**：新增员工姓名/手机号后自动生成 4 位员工 ID（从 1000 起），可随时刷新查看员工名单。
+  - **员工列表**：按门店创建员工（手机号 11 位、需密码），工号形如 `门店ID_002` 起递增，可随时刷新查看员工名单。
   - **通用优惠券**：在列表页点击“创建通用优惠券”进入独立创建页，填写名称、品牌、金额、最低消费、适用门店、有效期时长、类型，自动生成 6 位 ID（从 100000 起），支持下架/上架、复制、修改。
   - **优惠券发放**：按手机号检索用户并选择已存在的用户后，再选择通用券输入发放数量，生成实际优惠券，优惠券 ID 形如 `通用券ID_00000`（序号从 10000 起）；不存在的手机号会提示失败，不再自动创建用户。
   - **优惠券列表**：查看所有实际券（ID、名称、用户 ID、手机号、有效期时长、可用门店、状态）。
@@ -39,10 +44,13 @@ npm start  # 默认 http://localhost:3000
 - `GET /api/customers[?phone=xxx]`：返回用户及已发券/已核销数量，可按手机号模糊搜索。
 - `GET /api/coupons?customerId=xxx`：返回该客户全部优惠券。
 - `POST /api/coupons`：`{ customerId, templateId }` 生成优惠券。
-- `GET /api/employees[?phone=xxx]`：查询员工列表（按姓名/手机号模糊搜索）。
-- `POST /api/employees`：`{ name, phone }` 新增员工，自动生成从 1000 开始的 4 位 ID。
-- `POST /api/staff/login`：`{ phone }` 校验员工手机号后返回 `{ staffId, phone, name }`。
+- `GET /api/employees[?phone=xxx&storeId=xxx]`：查询员工列表（按姓名/手机号模糊搜索），可按门店过滤。
+- `POST /api/employees`：`{ name, phone, storeId, password }` 新增员工，工号形如 `门店ID_002` 起递增，手机号需 11 位。
+- `POST /api/staff/login`：`{ phone, password }` 校验员工手机号/密码后返回 `{ staffId, phone, name, storeId }`。
 - `POST /api/staff/verify`：`{ staffId, code }` 员工核销优惠券。
+- `POST /api/admin/login`：超级管理员登录（账号 admin / 密码 password）。
+- `POST /api/admin/stores` / `GET /api/admin/stores`：创建/查看门店（ID 从 101 起）。
+- `POST /api/admin/store-managers` / `POST /api/manager/login`：创建/登录门店管理员（手机号 + 密码）。
 - `GET /api/general-coupons[?query=xxx]`：查询通用优惠券模板。
 - `POST /api/general-coupons` / `PUT /api/general-coupons/:id`：创建或修改通用券。
 - `POST /api/general-coupons/:id/down` / `POST /api/general-coupons/:id/duplicate`：下架或复制通用券。

@@ -18,12 +18,21 @@ app.use(express.static(path.join(__dirname, '..', 'web')));
 
 const findTemplate = (id) => templates.find((tpl) => tpl.id === id);
 
+const isValidPhone = (phone) => /^\d{11}$/.test((phone || '').toString());
+
 const getGeneralCouponById = (id) =>
   db.prepare('SELECT * FROM general_coupons WHERE id = ?').get(id);
 
 const getEmployeeById = (id) => db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
 
 const getEmployeeByPhone = (phone) => db.prepare('SELECT * FROM employees WHERE phone = ?').get(phone);
+
+const getManagerByPhone = (phone) => db.prepare('SELECT * FROM store_managers WHERE phone = ?').get(phone);
+
+const nextStoreId = () => {
+  const row = db.prepare('SELECT COALESCE(MAX(id), 100) AS maxId FROM stores').get();
+  return (row?.maxId || 100) + 1;
+};
 
 const nextGeneralCouponId = () => {
   const row = db.prepare('SELECT COALESCE(MAX(id), 99999) as maxId FROM general_coupons').get();
@@ -35,6 +44,17 @@ const nextEmployeeId = () => {
   return (row?.maxId || 999) + 1;
 };
 
+const nextStaffCode = (storeId) => {
+  const rows = db
+    .prepare('SELECT staff_code FROM employees WHERE store_id = ? AND staff_code LIKE ? ORDER BY staff_code DESC')
+    .all(storeId, `${storeId}_%`);
+  if (!rows.length) return `${storeId}_002`;
+  const latest = rows[0].staff_code || `${storeId}_002`;
+  const parts = latest.split('_');
+  const seq = Number(parts[1] || '1') + 1;
+  return `${storeId}_${String(seq).padStart(3, '0')}`;
+};
+
 const serializeGeneralCoupon = (row) => ({
   id: row.id,
   name: row.name,
@@ -44,6 +64,7 @@ const serializeGeneralCoupon = (row) => ({
   durationDays: row.duration_days,
   couponType: row.coupon_type,
   storeScope: row.store_scope,
+  storeId: row.store_id,
   status: row.status,
   issuedCount: row.issued_count,
   usedCount: row.used_count,
@@ -57,29 +78,131 @@ app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (username === 'admin' && password === 'password') {
+    res.json({ role: 'super', username: 'admin' });
+  } else {
+    res.status(401).json({ message: '账号或密码错误' });
+  }
+});
+
+app.get('/api/admin/stores', (req, res) => {
+  const stores = db
+    .prepare(
+      `SELECT stores.*, sm.phone as manager_phone, sm.id as manager_id FROM stores
+       LEFT JOIN store_managers sm ON sm.store_id = stores.id
+       ORDER BY stores.id ASC`
+    )
+    .all()
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      createdAt: row.created_at,
+      managerPhone: row.manager_phone,
+      managerId: row.manager_id
+    }));
+  res.json({ stores });
+});
+
+app.post('/api/admin/stores', (req, res) => {
+  const { name } = req.body || {};
+  if (!name) {
+    res.status(400).json({ message: '门店名称必填' });
+    return;
+  }
+  const id = nextStoreId();
+  db.prepare('INSERT INTO stores (id, name) VALUES (?, ?)').run(id, name);
+  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(id);
+  res.status(201).json({ store: { id: store.id, name: store.name, createdAt: store.created_at } });
+});
+
+app.post('/api/admin/store-managers', (req, res) => {
+  const { storeId, name, phone, password } = req.body || {};
+  if (!storeId || !name || !phone || !password) {
+    res.status(400).json({ message: 'storeId, name, phone, password 必填' });
+    return;
+  }
+  if (!isValidPhone(phone)) {
+    res.status(400).json({ message: '手机号必须为11位数字' });
+    return;
+  }
+  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId);
+  if (!store) {
+    res.status(404).json({ message: '门店不存在' });
+    return;
+  }
+  if (getManagerByPhone(phone)) {
+    res.status(400).json({ message: '该手机号已存在门店管理员' });
+    return;
+  }
+  const managerId = `${storeId}_001`;
+  const existsManager = db.prepare('SELECT * FROM store_managers WHERE id = ?').get(managerId);
+  if (existsManager) {
+    res.status(400).json({ message: '该门店管理员已存在' });
+    return;
+  }
+  db.prepare('INSERT INTO store_managers (id, store_id, name, phone, password) VALUES (?, ?, ?, ?, ?)')
+    .run(managerId, storeId, name, phone, password);
+  const manager = db.prepare('SELECT * FROM store_managers WHERE id = ?').get(managerId);
+  res.status(201).json({
+    manager: {
+      id: manager.id,
+      storeId: manager.store_id,
+      name: manager.name,
+      phone: manager.phone,
+      createdAt: manager.created_at
+    }
+  });
+});
+
+app.post('/api/manager/login', (req, res) => {
+  const { phone, password } = req.body || {};
+  if (!phone || !password) {
+    res.status(400).json({ message: 'phone 和 password 必填' });
+    return;
+  }
+  if (!isValidPhone(phone)) {
+    res.status(400).json({ message: '手机号必须为11位数字' });
+    return;
+  }
+  const manager = getManagerByPhone(phone);
+  if (!manager || manager.password !== password) {
+    res.status(401).json({ message: '账号或密码错误' });
+    return;
+  }
+  res.json({ managerId: manager.id, storeId: manager.store_id, name: manager.name, phone: manager.phone });
+});
+
 app.get('/api/general-coupons', (req, res) => {
   const query = (req.query.query || '').trim();
+  const storeId = req.query.storeId ? Number(req.query.storeId) : null;
+  const whereStore = storeId ? 'AND (store_id IS NULL OR store_id = @storeId)' : '';
   const rows = query
     ? db
         .prepare(
-          `SELECT * FROM general_coupons WHERE name LIKE @q OR brand LIKE @q ORDER BY created_at DESC`
+          `SELECT * FROM general_coupons WHERE (name LIKE @q OR brand LIKE @q) ${whereStore} ORDER BY created_at DESC`
         )
-        .all({ q: `%${query}%` })
-    : db.prepare('SELECT * FROM general_coupons ORDER BY created_at DESC').all();
+        .all({ q: `%${query}%`, storeId })
+    : db
+        .prepare(
+          `SELECT * FROM general_coupons WHERE 1=1 ${whereStore} ORDER BY created_at DESC`
+        )
+        .all({ storeId });
 
   res.json({ templates: rows.map(serializeGeneralCoupon) });
 });
 
 app.post('/api/general-coupons', (req, res) => {
-  const { name, brand, amount, minSpend, durationDays, couponType, storeScope } = req.body || {};
+  const { name, brand, amount, minSpend, durationDays, couponType, storeScope, storeId } = req.body || {};
   if (!name || !amount || !couponType) {
     res.status(400).json({ message: 'name, amount, couponType are required' });
     return;
   }
   const id = nextGeneralCouponId();
   const stmt = db.prepare(`
-    INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, status)
-    VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, 'active')
+    INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, store_id, status)
+    VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, @storeId, 'active')
   `);
   stmt.run({
     id,
@@ -89,7 +212,8 @@ app.post('/api/general-coupons', (req, res) => {
     minSpend: Number(minSpend) || 0,
     durationDays: Number(durationDays) || 0,
     couponType,
-    storeScope: storeScope || '全部门店'
+    storeScope: storeScope || '全部门店',
+    storeId: storeId ? Number(storeId) : null
   });
   const created = getGeneralCouponById(id);
   res.status(201).json({ template: serializeGeneralCoupon(created) });
@@ -102,11 +226,11 @@ app.put('/api/general-coupons/:id', (req, res) => {
     res.status(404).json({ message: '模板不存在' });
     return;
   }
-  const { name, brand, amount, minSpend, durationDays, couponType, status, storeScope } = req.body || {};
+  const { name, brand, amount, minSpend, durationDays, couponType, status, storeScope, storeId } = req.body || {};
   const stmt = db.prepare(`
     UPDATE general_coupons
     SET name = @name, brand = @brand, amount = @amount, min_spend = @minSpend,
-        duration_days = @durationDays, coupon_type = @couponType, store_scope = @storeScope,
+        duration_days = @durationDays, coupon_type = @couponType, store_scope = @storeScope, store_id = COALESCE(@storeId, store_id),
         status = COALESCE(@status, status),
         updated_at = datetime('now')
     WHERE id = @id
@@ -120,6 +244,7 @@ app.put('/api/general-coupons/:id', (req, res) => {
     durationDays: durationDays != null ? Number(durationDays) : template.duration_days,
     couponType: couponType || template.coupon_type,
     storeScope: storeScope ?? template.store_scope,
+    storeId: storeId != null ? Number(storeId) : template.store_id,
     status
   });
   const updated = getGeneralCouponById(id);
@@ -147,8 +272,8 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
   }
   const newId = nextGeneralCouponId();
   db.prepare(
-    `INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, status)
-     VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, 'active')`
+    `INSERT INTO general_coupons (id, name, brand, amount, min_spend, duration_days, coupon_type, store_scope, store_id, status)
+     VALUES (@id, @name, @brand, @amount, @minSpend, @durationDays, @couponType, @storeScope, @storeId, 'active')`
   ).run({
     id: newId,
     name: template.name,
@@ -157,7 +282,8 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
     minSpend: template.min_spend,
     durationDays: template.duration_days,
     couponType: template.coupon_type,
-    storeScope: template.store_scope
+    storeScope: template.store_scope,
+    storeId: template.store_id
   });
   const created = getGeneralCouponById(newId);
   res.status(201).json({ template: serializeGeneralCoupon(created) });
@@ -165,28 +291,30 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
 
 app.get('/api/customers', (req, res) => {
   const phone = (req.query.phone || '').trim();
+  const storeId = req.query.storeId ? Number(req.query.storeId) : null;
+  const storeWhere = storeId ? 'AND coupons.store_id = @storeId' : '';
   const rows = phone
     ? db
         .prepare(
           `SELECT customers.id, customers.phone, customers.created_at, COUNT(coupons.id) AS coupon_count,
           SUM(CASE WHEN coupons.status = 'used' THEN 1 ELSE 0 END) AS used_count
           FROM customers
-          LEFT JOIN coupons ON coupons.customer_id = customers.id
+          LEFT JOIN coupons ON coupons.customer_id = customers.id ${storeWhere}
           WHERE customers.phone LIKE @phone
           GROUP BY customers.id
           ORDER BY customers.created_at DESC`
         )
-        .all({ phone: `%${phone}%` })
+        .all({ phone: `%${phone}%`, storeId })
     : db
         .prepare(`
           SELECT customers.id, customers.phone, customers.created_at, COUNT(coupons.id) AS coupon_count,
             SUM(CASE WHEN coupons.status = 'used' THEN 1 ELSE 0 END) AS used_count
           FROM customers
-          LEFT JOIN coupons ON coupons.customer_id = customers.id
+          LEFT JOIN coupons ON coupons.customer_id = customers.id ${storeWhere}
           GROUP BY customers.id
           ORDER BY customers.created_at DESC
         `)
-        .all();
+        .all({ storeId });
 
   const customers = rows.map((row) => ({
     id: row.id,
@@ -201,28 +329,43 @@ app.get('/api/customers', (req, res) => {
 
 app.get('/api/employees', (req, res) => {
   const phone = (req.query.phone || '').trim();
+  const storeId = req.query.storeId ? Number(req.query.storeId) : null;
+  const storeClause = storeId ? 'AND store_id = @storeId' : '';
   const rows = phone
     ? db
         .prepare(
-          `SELECT * FROM employees WHERE phone LIKE @phone OR name LIKE @phone ORDER BY created_at DESC`
+          `SELECT * FROM employees WHERE (phone LIKE @phone OR name LIKE @phone) ${storeClause} ORDER BY created_at DESC`
         )
-        .all({ phone: `%${phone}%` })
-    : db.prepare('SELECT * FROM employees ORDER BY created_at DESC').all();
+        .all({ phone: `%${phone}%`, storeId })
+    : db
+        .prepare(`SELECT * FROM employees WHERE 1=1 ${storeClause} ORDER BY created_at DESC`)
+        .all({ storeId });
 
   res.json({
     employees: rows.map((row) => ({
       id: row.id,
       name: row.name,
       phone: row.phone,
+      storeId: row.store_id,
+      staffCode: row.staff_code,
       createdAt: row.created_at
     }))
   });
 });
 
 app.post('/api/employees', (req, res) => {
-  const { name, phone } = req.body || {};
-  if (!name || !phone) {
-    res.status(400).json({ message: 'name and phone are required' });
+  const { name, phone, storeId, password } = req.body || {};
+  if (!name || !phone || !storeId || !password) {
+    res.status(400).json({ message: 'name, phone, storeId, password are required' });
+    return;
+  }
+  if (!isValidPhone(phone)) {
+    res.status(400).json({ message: '手机号必须为11位数字' });
+    return;
+  }
+  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId);
+  if (!store) {
+    res.status(404).json({ message: '门店不存在' });
     return;
   }
   const existing = getEmployeeByPhone(phone);
@@ -231,15 +374,23 @@ app.post('/api/employees', (req, res) => {
     return;
   }
   const id = nextEmployeeId();
-  db.prepare('INSERT INTO employees (id, name, phone) VALUES (?, ?, ?)').run(id, name, phone);
+  const staffCode = nextStaffCode(storeId);
+  db.prepare('INSERT INTO employees (id, name, phone, store_id, staff_code, password) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, name, phone, storeId, staffCode, password || '');
   const created = getEmployeeById(id);
-  res.status(201).json({ employee: { id: created.id, name: created.name, phone: created.phone } });
+  res.status(201).json({
+    employee: { id: created.id, name: created.name, phone: created.phone, storeId: created.store_id, staffCode }
+  });
 });
 
 app.post('/api/login', (req, res) => {
   const phone = (req.body.phone || '').toString();
   if (!phone) {
     res.status(400).json({ message: 'phone is required' });
+    return;
+  }
+  if (!isValidPhone(phone)) {
+    res.status(400).json({ message: '手机号必须为11位数字' });
     return;
   }
   const existing = db.prepare('SELECT * FROM customers WHERE phone = ?').get(phone);
@@ -254,16 +405,27 @@ app.post('/api/login', (req, res) => {
 
 app.post('/api/staff/login', (req, res) => {
   const phone = (req.body.phone || '').toString();
-  if (!phone) {
-    res.status(400).json({ message: 'phone is required' });
+  const password = (req.body.password || '').toString();
+  if (!phone || !password) {
+    res.status(400).json({ message: 'phone and password are required' });
+    return;
+  }
+  if (!isValidPhone(phone)) {
+    res.status(400).json({ message: '手机号必须为11位数字' });
     return;
   }
   const employee = getEmployeeByPhone(phone);
-  if (!employee) {
-    res.status(404).json({ message: '该手机号未注册员工' });
+  if (!employee || (employee.password && employee.password !== password)) {
+    res.status(404).json({ message: '该手机号未注册员工或密码错误' });
     return;
   }
-  res.json({ staffId: employee.id, name: employee.name, phone: employee.phone });
+  res.json({
+    staffId: employee.staff_code || employee.id,
+    id: employee.id,
+    name: employee.name,
+    phone: employee.phone,
+    storeId: employee.store_id
+  });
 });
 
 app.get('/api/coupons', (req, res) => {
@@ -278,22 +440,25 @@ app.get('/api/coupons', (req, res) => {
 
 app.get('/api/admin/coupons', (req, res) => {
   const query = (req.query.query || '').trim();
+  const storeId = req.query.storeId ? Number(req.query.storeId) : null;
+  const storeWhere = storeId ? 'AND coupons.store_id = @storeId' : '';
   const rows = query
     ? db
         .prepare(
           `SELECT coupons.*, customers.phone as customer_phone FROM coupons
            LEFT JOIN customers ON customers.id = coupons.customer_id
-           WHERE coupons.serial LIKE @q OR coupons.title LIKE @q OR customers.phone LIKE @q
+           WHERE (coupons.serial LIKE @q OR coupons.title LIKE @q OR customers.phone LIKE @q) ${storeWhere}
            ORDER BY coupons.created_at DESC`
         )
-        .all({ q: `%${query}%` })
+        .all({ q: `%${query}%`, storeId })
     : db
         .prepare(
           `SELECT coupons.*, customers.phone as customer_phone FROM coupons
            LEFT JOIN customers ON customers.id = coupons.customer_id
+           WHERE 1=1 ${storeWhere}
            ORDER BY coupons.created_at DESC`
         )
-        .all();
+        .all({ storeId });
 
   res.json({ coupons: rows.map((row) => serializeCoupon(row, true)) });
 });
@@ -321,7 +486,7 @@ app.post('/api/coupons', (req, res) => {
 });
 
 app.post('/api/issue-coupons', (req, res) => {
-  const { customerId, phone, templateId, quantity } = req.body || {};
+  const { customerId, phone, templateId, quantity, storeId: issueStoreId } = req.body || {};
   const qty = Number(quantity) || 0;
   if (!templateId) {
     res.status(400).json({ message: 'templateId is required' });
@@ -341,9 +506,20 @@ app.post('/api/issue-coupons', (req, res) => {
     res.status(400).json({ message: '该模板已下架' });
     return;
   }
+  if (issueStoreId) {
+    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(issueStoreId);
+    if (!store) {
+      res.status(404).json({ message: '门店不存在，请检查 storeId' });
+      return;
+    }
+  }
 
   let ownerId = Number(customerId) || null;
   let ownerPhone = (phone || '').trim();
+  if (ownerPhone && !isValidPhone(ownerPhone)) {
+    res.status(400).json({ message: '手机号必须为11位数字' });
+    return;
+  }
   if (!ownerId) {
     if (!ownerPhone) {
       res.status(400).json({ message: 'customerId or phone is required' });
@@ -368,8 +544,8 @@ app.post('/api/issue-coupons', (req, res) => {
   }
 
   const inserts = db.prepare(`
-    INSERT INTO coupons (customer_id, template_id, template_base_id, code, title, face_value, category, brand, min_spend, duration_days, coupon_type, serial, store_scope, status)
-    VALUES (@customerId, @templateId, @templateBaseId, @code, @title, @faceValue, @category, @brand, @minSpend, @durationDays, @couponType, @serial, @storeScope, 'active')
+    INSERT INTO coupons (customer_id, template_id, template_base_id, code, title, face_value, category, brand, min_spend, duration_days, coupon_type, serial, store_scope, store_id, status)
+    VALUES (@customerId, @templateId, @templateBaseId, @code, @title, @faceValue, @category, @brand, @minSpend, @durationDays, @couponType, @serial, @storeScope, @storeId, 'active')
   `);
 
   const issued = [];
@@ -390,7 +566,8 @@ app.post('/api/issue-coupons', (req, res) => {
       durationDays: template.duration_days,
       couponType: template.coupon_type,
       serial,
-      storeScope: template.store_scope || '全部门店'
+      storeScope: template.store_scope || '全部门店',
+      storeId: template.store_id || issueStoreId || null
     });
     const coupon = db.prepare('SELECT * FROM coupons WHERE code = ?').get(code);
     issued.push(serializeCoupon({ ...coupon, customer_phone: ownerPhone }, true));
@@ -433,7 +610,9 @@ app.post('/api/staff/verify', (req, res) => {
     res.status(400).json({ message: 'staffId and code are required' });
     return;
   }
-  const employee = getEmployeeById(Number(staffId));
+  const employee =
+    getEmployeeById(Number(staffId)) ||
+    db.prepare('SELECT * FROM employees WHERE staff_code = ?').get(staffId.toString());
   if (!employee) {
     res.status(403).json({ message: '员工不存在或未授权' });
     return;
@@ -474,7 +653,8 @@ function serializeCoupon(row, includePhone = false) {
     usedAt: row.used_at,
     statusLabel: row.status === 'used' ? '已核销' : '未核销',
     customerPhone: includePhone ? row.customer_phone : undefined,
-    storeScope: row.store_scope || '全部门店'
+    storeScope: row.store_scope || '全部门店',
+    storeId: row.store_id
   };
 }
 

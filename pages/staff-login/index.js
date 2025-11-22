@@ -4,7 +4,8 @@ Page({
   data: {
     phoneDisplay: '未授权',
     loading: false,
-    manualPhone: ''
+    manualPhone: '',
+    password: ''
   },
 
   onLoad() {
@@ -20,7 +21,11 @@ Page({
   onGetPhoneNumber(e) {
     const directPhone = e.detail.errMsg === 'getPhoneNumber:ok' ? e.detail.phoneNumber : '';
     if (directPhone) {
-      this.loginStaff(directPhone);
+      if (!this.data.password) {
+        wx.showToast({ title: '请输入员工密码', icon: 'none' });
+        return;
+      }
+      this.loginStaff(directPhone, this.data.password);
       return;
     }
     wx.showToast({ title: '未获取到授权手机号，请重试或手动输入', icon: 'none' });
@@ -30,22 +35,39 @@ Page({
     this.setData({ manualPhone: (e.detail.value || '').trim() });
   },
 
+  onPasswordInput(e) {
+    this.setData({ password: (e.detail.value || '').trim() });
+  },
+
   onManualSubmit() {
     const manualPhone = (this.data.manualPhone || '').trim();
     if (!manualPhone) {
       wx.showToast({ title: '请先输入手机号', icon: 'none' });
       return;
     }
-    this.loginStaff(manualPhone);
+    if (manualPhone.length !== 11) {
+      wx.showToast({ title: '手机号需为11位', icon: 'none' });
+      return;
+    }
+    if (!this.data.password) {
+      wx.showToast({ title: '请输入员工密码', icon: 'none' });
+      return;
+    }
+    this.loginStaff(manualPhone, this.data.password);
   },
 
-  loginStaff(phone) {
+  loginStaff(phone, passwordFromInput) {
     if (this.data.loading) return;
     this.setData({ loading: true });
+    if (!phone || phone.toString().length !== 11) {
+      wx.showToast({ title: '手机号需为11位', icon: 'none' });
+      this.setData({ loading: false });
+      return;
+    }
     wx.request({
       url: `${app.globalData.apiBaseUrl}/api/staff/login`,
       method: 'POST',
-      data: { phone },
+      data: { phone, password: passwordFromInput || this.data.password },
       success: (res) => {
         const { staffId, phone: savedPhone, name } = res.data || {};
         if (!staffId) {

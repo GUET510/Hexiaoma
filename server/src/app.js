@@ -195,10 +195,31 @@ app.get('/api/general-coupons', (req, res) => {
 
 app.post('/api/general-coupons', (req, res) => {
   const { name, brand, amount, minSpend, durationDays, couponType, storeScope, storeId } = req.body || {};
+  const amountValue = Number(amount);
+  const minSpendValue = Number(minSpend) || 0;
+  const durationValue = Number(durationDays) || 0;
+  const storeIdValue = storeId === undefined || storeId === null || storeId === '' ? null : Number(storeId);
+
   if (!name || !amount || !couponType) {
     res.status(400).json({ message: 'name, amount, couponType are required' });
     return;
   }
+  if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    res.status(400).json({ message: '金额必须为正数' });
+    return;
+  }
+  if (storeIdValue !== null && !Number.isFinite(storeIdValue)) {
+    res.status(400).json({ message: '门店ID格式不正确' });
+    return;
+  }
+  if (storeIdValue !== null) {
+    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeIdValue);
+    if (!store) {
+      res.status(404).json({ message: '门店不存在，请先创建门店' });
+      return;
+    }
+  }
+
   try {
     const id = nextGeneralCouponId();
     const stmt = db.prepare(`
@@ -209,12 +230,12 @@ app.post('/api/general-coupons', (req, res) => {
       id,
       name,
       brand: brand || '',
-      amount: Number(amount),
-      minSpend: Number(minSpend) || 0,
-      durationDays: Number(durationDays) || 0,
+      amount: amountValue,
+      minSpend: minSpendValue,
+      durationDays: durationValue,
       couponType,
       storeScope: storeScope || '全部门店',
-      storeId: storeId ? Number(storeId) : null
+      storeId: storeIdValue
     });
     const created = getGeneralCouponById(id);
     res.status(201).json({ template: serializeGeneralCoupon(created) });
@@ -297,14 +318,14 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
 app.get('/api/customers', (req, res) => {
   const phone = (req.query.phone || '').trim();
   const storeId = req.query.storeId ? Number(req.query.storeId) : null;
-  const storeWhere = storeId ? 'AND coupons.store_id = @storeId' : '';
+  const joinFilter = storeId ? 'LEFT JOIN coupons ON coupons.customer_id = customers.id AND coupons.store_id = @storeId' : 'LEFT JOIN coupons ON coupons.customer_id = customers.id';
   const rows = phone
     ? db
         .prepare(
           `SELECT customers.id, customers.phone, customers.created_at, COUNT(coupons.id) AS coupon_count,
           SUM(CASE WHEN coupons.status = 'used' THEN 1 ELSE 0 END) AS used_count
           FROM customers
-          LEFT JOIN coupons ON coupons.customer_id = customers.id ${storeWhere}
+          ${joinFilter}
           WHERE customers.phone LIKE @phone
           GROUP BY customers.id
           ORDER BY customers.created_at DESC`
@@ -315,7 +336,7 @@ app.get('/api/customers', (req, res) => {
           SELECT customers.id, customers.phone, customers.created_at, COUNT(coupons.id) AS coupon_count,
             SUM(CASE WHEN coupons.status = 'used' THEN 1 ELSE 0 END) AS used_count
           FROM customers
-          LEFT JOIN coupons ON coupons.customer_id = customers.id ${storeWhere}
+          ${joinFilter}
           GROUP BY customers.id
           ORDER BY customers.created_at DESC
         `)

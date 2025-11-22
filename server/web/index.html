@@ -457,11 +457,16 @@
       document.getElementById('mainLayout').classList.remove('hidden');
       setNavVisibility();
       const empStoreInput = document.getElementById('empStore');
+      const tplStoreInput = document.getElementById('tplStoreId');
       if (sessionRole === 'manager') {
         empStoreInput.value = currentStoreId || '';
         empStoreInput.setAttribute('disabled', 'disabled');
+        tplStoreInput.value = currentStoreId || '';
+        tplStoreInput.setAttribute('disabled', 'disabled');
       } else {
         empStoreInput.removeAttribute('disabled');
+        tplStoreInput.removeAttribute('disabled');
+        tplStoreInput.value = '';
       }
       renderSessionInfo();
       switchView(view);
@@ -875,6 +880,7 @@
       const amount = Number(document.getElementById('tplAmount').value);
       const storeIdInput = Number(document.getElementById('tplStoreId').value);
       const storeId = ensureManagerStore(storeIdInput) || storeIdInput || undefined;
+      const storeScope = (document.getElementById('tplStore').value || '').trim() || '全部门店';
       if (!name || !amount || Number.isNaN(amount) || amount <= 0) {
         switchView('general');
         document.getElementById('tplName').focus();
@@ -884,7 +890,7 @@
       const payload = {
         name,
         brand: document.getElementById('tplBrand').value.trim(),
-        storeScope: document.getElementById('tplStore').value.trim(),
+        storeScope,
         storeId,
         amount,
         minSpend: Number(document.getElementById('tplMinSpend').value) || 0,

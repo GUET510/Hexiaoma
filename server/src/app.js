@@ -18,7 +18,25 @@ const __dirname = path.dirname(__filename);
 runMigrations();
 
 const app = express();
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ALLOW_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (process.env.NODE_ENV === 'production') {
+  if (allowedOrigins.length) {
+    app.use(
+      cors({
+        origin: allowedOrigins,
+        credentials: true
+      })
+    );
+  } else {
+    console.warn('[SECURITY] 生产环境未配置 CORS_ALLOW_ORIGINS，跨域请求将被拒绝');
+    app.use(cors({ origin: false }));
+  }
+} else {
+  app.use(cors());
+}
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
@@ -328,7 +346,9 @@ app.post('/auth/loginByCode', async (req, res) => {
   res.json(await buildTokenResponse(user));
 });
 
-app.get('/coupon/templates', (req, res) => {
+app.get('/coupon/templates', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const rows = db
     .prepare('SELECT id, name, discount_type, value, valid_days, brand_id, created_at FROM coupon_templates ORDER BY created_at DESC')
     .all();

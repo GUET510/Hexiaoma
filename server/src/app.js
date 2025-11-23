@@ -240,7 +240,7 @@ app.put('/api/general-coupons/:id', (req, res) => {
     SET name = @name, brand = @brand, amount = @amount, min_spend = @minSpend,
         duration_days = @durationDays, coupon_type = @couponType,
         status = COALESCE(@status, status),
-        updated_at = datetime('now')
+        updated_at = datetime('now','+8 hours')
     WHERE id = @id
   `);
   stmt.run({
@@ -264,7 +264,7 @@ app.post('/api/general-coupons/:id/down', (req, res) => {
     res.status(404).json({ message: '模板不存在' });
     return;
   }
-  db.prepare("UPDATE general_coupons SET status = 'inactive', updated_at = datetime('now') WHERE id = ?").run(id);
+  db.prepare("UPDATE general_coupons SET status = 'inactive', updated_at = datetime('now','+8 hours') WHERE id = ?").run(id);
   const updated = getGeneralCouponById(id);
   res.json({ template: serializeGeneralCoupon(updated) });
 });
@@ -609,7 +609,7 @@ app.post('/api/issue-coupons', (req, res) => {
   }
 
   db.prepare(
-    'UPDATE general_coupons SET issued_count = issued_count + @count, next_serial = next_serial + @count, updated_at = datetime(\'now\') WHERE id = @id'
+    'UPDATE general_coupons SET issued_count = issued_count + @count, next_serial = next_serial + @count, updated_at = datetime(\'now\',\'+8 hours\') WHERE id = @id'
   ).run({ count: qty, id: template.id });
 
   res.status(201).json({ coupons: issued });
@@ -631,7 +631,7 @@ app.post('/api/coupons/verify', (req, res) => {
     return;
   }
   db.prepare(
-    "UPDATE coupons SET status = ?, used_at = datetime('now'), used_by_staff_id = NULL, used_by_staff_name = NULL, used_by_staff_phone = NULL WHERE id = ?"
+    "UPDATE coupons SET status = ?, used_at = datetime('now','+8 hours'), used_by_staff_id = NULL, used_by_staff_name = NULL, used_by_staff_phone = NULL WHERE id = ?"
   ).run('used', coupon.id);
   if (coupon.template_base_id) {
     db.prepare('UPDATE general_coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.template_base_id);
@@ -664,7 +664,7 @@ app.post('/api/staff/verify', (req, res) => {
     return;
   }
   db.prepare(
-    "UPDATE coupons SET status = ?, used_at = datetime('now'), used_by_staff_id = ?, used_by_staff_name = ?, used_by_staff_phone = ? WHERE id = ?"
+    "UPDATE coupons SET status = ?, used_at = datetime('now','+8 hours'), used_by_staff_id = ?, used_by_staff_name = ?, used_by_staff_phone = ? WHERE id = ?"
   ).run('used', employee.id, employee.name, employee.phone, coupon.id);
   if (coupon.template_base_id) {
     db.prepare('UPDATE general_coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.template_base_id);

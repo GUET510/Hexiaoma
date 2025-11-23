@@ -18,7 +18,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS customers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   phone TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS employees (
@@ -28,13 +28,13 @@ CREATE TABLE IF NOT EXISTS employees (
   store_id INTEGER,
   staff_code TEXT UNIQUE,
   password TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS stores (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS store_managers (
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS store_managers (
   name TEXT NOT NULL,
   phone TEXT NOT NULL UNIQUE,
   password TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
   FOREIGN KEY(store_id) REFERENCES stores(id)
 );
 
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS general_coupons (
   used_count INTEGER NOT NULL DEFAULT 0,
   locked_count INTEGER NOT NULL DEFAULT 0,
   next_serial INTEGER NOT NULL DEFAULT 10000,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
   updated_at TEXT
 );
 
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS coupons (
   used_by_staff_name TEXT,
   used_by_staff_phone TEXT,
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
   used_at TEXT,
   FOREIGN KEY(customer_id) REFERENCES customers(id)
 );

@@ -3,7 +3,6 @@ const app = getApp();
 
 Page({
   data: {
-    manualPhone: '',
     loading: false
   },
 
@@ -20,47 +19,33 @@ Page({
     }
   },
 
-  onGetPhoneNumber(e) {
-    const phone = e.detail?.phoneNumber;
-    if (!phone) {
-      wx.showToast({ title: '未获取到授权手机号', icon: 'none' });
-      return;
-    }
-    this.loginWithPhone(phone);
-  },
-
-  onManualPhoneInput(e) {
-    this.setData({ manualPhone: (e.detail.value || '').trim() });
-  },
-
-  onManualSubmit() {
-    const phone = (this.data.manualPhone || '').trim();
-    if (!/^\d{11}$/.test(phone)) {
-      wx.showToast({ title: '请输入11位手机号', icon: 'none' });
-      return;
-    }
-    this.loginWithPhone(phone);
-  },
-
-  loginWithPhone(phone) {
+  loginWithCode() {
     if (this.data.loading) return;
     this.setData({ loading: true });
-    request({
-      url: '/auth/loginByPhone',
-      method: 'POST',
-      data: { phone, openid: app.globalData?.userInfo?.openid, unionid: app.globalData?.userInfo?.unionid, code: app.globalData?.lastWxCode }
-    })
-      .then((res) => {
-        if (res && res.token && res.user) {
-          app.cacheUser(res.user, res.token);
-          wx.showToast({ title: '登录成功', icon: 'success' });
-          wx.reLaunch({ url: '/pages/couponList/index' });
+    wx.login({
+      success: (resp) => {
+        if (!resp.code) {
+          wx.showToast({ title: '获取登录凭证失败', icon: 'none' });
+          this.setData({ loading: false });
+          return;
         }
-      })
-      .catch(() => {})
-      .finally(() => {
+        app.globalData.lastWxCode = resp.code;
+        request({ url: '/auth/loginByCode', method: 'POST', data: { code: resp.code }, loading: true })
+          .then((res) => {
+            if (res && res.token && res.user) {
+              app.cacheUser(res.user, res.token);
+              wx.showToast({ title: '登录成功', icon: 'success' });
+              wx.reLaunch({ url: '/pages/couponList/index' });
+            }
+          })
+          .catch(() => {})
+          .finally(() => this.setData({ loading: false }));
+      },
+      fail: () => {
+        wx.showToast({ title: '登录失败，请重试', icon: 'none' });
         this.setData({ loading: false });
-      });
+      }
+    });
   },
 
   goStaffLogin() {

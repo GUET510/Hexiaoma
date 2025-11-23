@@ -346,6 +346,7 @@
 
   <script>
     const apiBase = '';
+    let adminToken = localStorage.getItem('adminToken') || '';
     let customers = [];
     let employees = [];
     let generalCoupons = [];
@@ -401,6 +402,28 @@
       return /^\d{11}$/.test((phone || '').toString());
     }
 
+    function withAuthHeaders(options = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+      if (adminToken) {
+        headers.Authorization = `Bearer ${adminToken}`;
+      }
+      return { ...options, headers };
+    }
+
+    async function authedFetch(url, options = {}) {
+      const res = await fetch(url, withAuthHeaders(options));
+      if (res.status === 401) {
+        alert('登录已过期，请重新登录');
+        adminToken = '';
+        localStorage.removeItem('adminToken');
+        document.getElementById('mainLayout').classList.add('hidden');
+        document.getElementById('authSection').classList.remove('hidden');
+        showRoleChooser();
+        throw new Error('unauthorized');
+      }
+      return res;
+    }
+
     function ensureManagerStore(input) {
       if (sessionRole === 'manager' && currentStoreId) return currentStoreId;
       return input || null;
@@ -408,6 +431,8 @@
 
     function showRoleChooser() {
       authMode = null;
+      adminToken = '';
+      localStorage.removeItem('adminToken');
       document.getElementById('roleCard').classList.remove('hidden');
       document.getElementById('superLoginCard').classList.add('hidden');
       document.getElementById('managerLoginCard').classList.add('hidden');
@@ -479,13 +504,16 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-      if (res.ok) {
-        sessionRole = 'super';
+      const data = await res.json();
+      if (res.ok && data.token) {
+        adminToken = data.token;
+        localStorage.setItem('adminToken', adminToken);
+        sessionRole = data.user?.role || 'super';
         currentStoreId = null;
         currentManager = null;
         enterBackend();
       } else {
-        alert('管理员账号或密码错误');
+        alert(data.message || '管理员账号或密码错误');
       }
     }
 
@@ -501,14 +529,16 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password })
       });
-      if (res.ok) {
-        const data = await res.json();
-        sessionRole = 'manager';
-        currentStoreId = data.storeId;
-        currentManager = data;
+      const data = await res.json();
+      if (res.ok && data.token) {
+        adminToken = data.token;
+        localStorage.setItem('adminToken', adminToken);
+        sessionRole = data.user?.role || 'manager';
+        currentStoreId = data.manager?.storeId;
+        currentManager = data.manager || null;
         enterBackend();
       } else {
-        alert('门店管理员账号或密码错误');
+        alert(data.message || '门店管理员账号或密码错误');
       }
     }
 
@@ -723,53 +753,53 @@
         .join('');
     }
 
-    function loadCustomers(phone = '') {
+    async function loadCustomers(phone = '') {
       const query = storeQuery(phone ? `?phone=${encodeURIComponent(phone)}` : '');
-      fetch(`${apiBase}/api/customers${query}`)
-        .then((r) => r.json())
-        .then((data) => populateCustomerSelectList(data.customers || []))
-        .catch(() => {
-          document.getElementById('customerList').innerHTML = '<p class="small">加载用户失败</p>';
-        });
+      try {
+        const res = await authedFetch(`${apiBase}/api/customers${query}`);
+        const data = await res.json();
+        populateCustomerSelectList(data.customers || []);
+      } catch (err) {
+        document.getElementById('customerList').innerHTML = '<p class="small">加载用户失败</p>';
+      }
     }
 
-    function loadEmployees() {
+    async function loadEmployees() {
       const phone = document.getElementById('empSearch')?.value || '';
       const query = storeQuery(phone ? `?phone=${encodeURIComponent(phone.trim())}` : '');
-      fetch(`${apiBase}/api/employees${query}`)
-        .then((r) => r.json())
-        .then((data) => {
-          employees = data.employees || [];
-          renderEmployees(employees);
-        })
-        .catch(() => {
-          document.getElementById('employeeTable').innerHTML = '<tr><td colspan="4">加载失败</td></tr>';
-        });
+      try {
+        const res = await authedFetch(`${apiBase}/api/employees${query}`);
+        const data = await res.json();
+        employees = data.employees || [];
+        renderEmployees(employees);
+      } catch (err) {
+        document.getElementById('employeeTable').innerHTML = '<tr><td colspan="4">加载失败</td></tr>';
+      }
     }
 
-    function loadGeneralCoupons() {
+    async function loadGeneralCoupons() {
       const query = storeQuery('');
-      fetch(`${apiBase}/api/general-coupons${query}`)
-        .then((r) => r.json())
-        .then((data) => {
-          generalCoupons = data.templates || [];
-          renderGeneralList(generalCoupons);
-          renderIssueTemplates();
-        })
-        .catch(() => {
-          document.getElementById('generalList').innerHTML = '<tr><td colspan="8">加载失败</td></tr>';
-        });
+      try {
+        const res = await authedFetch(`${apiBase}/api/general-coupons${query}`);
+        const data = await res.json();
+        generalCoupons = data.templates || [];
+        renderGeneralList(generalCoupons);
+        renderIssueTemplates();
+      } catch (err) {
+        document.getElementById('generalList').innerHTML = '<tr><td colspan="8">加载失败</td></tr>';
+      }
     }
 
-    function loadCouponsList() {
+    async function loadCouponsList() {
       const q = document.getElementById('couponSearch').value.trim();
       const query = storeQuery(q ? `?query=${encodeURIComponent(q)}` : '');
-      fetch(`${apiBase}/api/admin/coupons${query}`)
-        .then((r) => r.json())
-        .then((data) => renderCoupons(data.coupons || []))
-        .catch(() => {
-          document.getElementById('couponTable').innerHTML = '<tr><td colspan="7">加载失败</td></tr>';
-        });
+      try {
+        const res = await authedFetch(`${apiBase}/api/admin/coupons${query}`);
+        const data = await res.json();
+        renderCoupons(data.coupons || []);
+      } catch (err) {
+        document.getElementById('couponTable').innerHTML = '<tr><td colspan="7">加载失败</td></tr>';
+      }
     }
 
     function selectCustomer(id, phone = '') {
@@ -799,7 +829,7 @@
       switchView('issue');
     }
 
-    function createEmployee() {
+    async function createEmployee() {
       const name = document.getElementById('empName').value.trim();
       const phone = document.getElementById('empPhone').value.trim();
       const storeInput = Number(document.getElementById('empStore').value);
@@ -813,26 +843,22 @@
         alert('手机号必须为11位');
         return;
       }
-      fetch(`${apiBase}/api/employees`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, storeId, password })
-      })
-        .then((r) => {
-          if (!r.ok) return r.json().then((d) => Promise.reject(d.message || '创建失败'));
-          return r.json();
-        })
-        .then(() => {
-          document.getElementById('empName').value = '';
-          document.getElementById('empPhone').value = '';
-          document.getElementById('empStore').value = '';
-          document.getElementById('empPassword').value = '';
-          loadEmployees();
-          alert('员工创建成功');
-        })
-        .catch((err) => {
-          alert(err || '创建失败');
+      try {
+        const res = await authedFetch(`${apiBase}/api/employees`, {
+          method: 'POST',
+          body: JSON.stringify({ name, phone, storeId, password })
         });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || '创建失败');
+        document.getElementById('empName').value = '';
+        document.getElementById('empPhone').value = '';
+        document.getElementById('empStore').value = '';
+        document.getElementById('empPassword').value = '';
+        loadEmployees();
+        alert('员工创建成功');
+      } catch (err) {
+        alert(err.message || '创建失败');
+      }
     }
 
     function startEdit(id) {
@@ -879,9 +905,8 @@
       };
       const url = editingTplId ? `${apiBase}/api/general-coupons/${editingTplId}` : `${apiBase}/api/general-coupons`;
       const method = editingTplId ? 'PUT' : 'POST';
-      fetch(url, {
+      authedFetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
         .then(async (r) => {
@@ -903,9 +928,8 @@
     function toggleTemplate(id) {
       const tpl = generalCoupons.find((t) => t.id === id);
       if (tpl && tpl.status === 'inactive') {
-        fetch(`${apiBase}/api/general-coupons/${id}`, {
+        authedFetch(`${apiBase}/api/general-coupons/${id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'active' })
         })
           .then((r) => r.json())
@@ -913,14 +937,14 @@
           .catch(() => alert('上架失败'));
         return;
       }
-      fetch(`${apiBase}/api/general-coupons/${id}/down`, { method: 'POST' })
+      authedFetch(`${apiBase}/api/general-coupons/${id}/down`, { method: 'POST' })
         .then((r) => r.json())
         .then(() => loadGeneralCoupons())
         .catch(() => alert('下架失败'));
     }
 
     function duplicateTemplate(id) {
-      fetch(`${apiBase}/api/general-coupons/${id}/duplicate`, { method: 'POST' })
+      authedFetch(`${apiBase}/api/general-coupons/${id}/duplicate`, { method: 'POST' })
         .then((r) => r.json())
         .then(() => loadGeneralCoupons())
         .catch(() => alert('复制失败'));
@@ -933,7 +957,7 @@
         return;
       }
       const query = storeQuery(phone ? `?phone=${encodeURIComponent(phone)}` : '');
-      fetch(`${apiBase}/api/customers${query}`)
+      authedFetch(`${apiBase}/api/customers${query}`)
         .then((r) => r.json())
         .then((data) => {
           issueSearchResults = data.customers || [];
@@ -957,31 +981,29 @@
       renderIssueUser();
     }
 
-    function loadStores() {
+    async function loadStores() {
       if (sessionRole !== 'super') {
         renderStoresTable([]);
         renderStoreOptions([]);
         return;
       }
-      fetch(`${apiBase}/api/admin/stores`)
-        .then((r) => r.json())
-        .then((data) => {
-          stores = data.stores || [];
-          renderStoresTable(stores);
-          renderStoreOptions(stores);
-        })
-        .catch(() => {
-          document.getElementById('storeTable').innerHTML = '<tr><td colspan="4">加载失败</td></tr>';
-        });
+      try {
+        const res = await authedFetch(`${apiBase}/api/admin/stores`);
+        const data = await res.json();
+        stores = data.stores || [];
+        renderStoresTable(stores);
+        renderStoreOptions(stores);
+      } catch (err) {
+        document.getElementById('storeTable').innerHTML = '<tr><td colspan="4">加载失败</td></tr>';
+      }
     }
 
     async function createStore() {
       if (sessionRole !== 'super') return alert('仅超级管理员可以创建门店');
       const name = document.getElementById('storeName').value.trim();
       if (!name) return alert('请输入门店名称');
-      const res = await fetch(`${apiBase}/api/admin/stores`, {
+      const res = await authedFetch(`${apiBase}/api/admin/stores`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
       if (res.ok) {
@@ -1006,9 +1028,8 @@
         alert('手机号必须为11位');
         return;
       }
-      const res = await fetch(`${apiBase}/api/admin/store-managers`, {
+      const res = await authedFetch(`${apiBase}/api/admin/store-managers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeId, name, phone, password })
       });
       if (res.ok) {
@@ -1038,9 +1059,8 @@
         phone: phone || undefined,
         storeId: sessionRole === 'manager' ? currentStoreId : undefined
       };
-      fetch(`${apiBase}/api/issue-coupons`, {
+      authedFetch(`${apiBase}/api/issue-coupons`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
         .then(async (r) => {

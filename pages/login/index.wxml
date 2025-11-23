@@ -1,21 +1,12 @@
 <view class="page">
   <view class="hero">
     <view class="title">欢迎使用优惠券助手</view>
-    <view class="sub">手机号一键登录，查看优惠券与核销工具</view>
+    <view class="sub">请使用微信授权登录查看优惠券</view>
   </view>
 
   <view class="section">
-    <view class="section-title">授权登录</view>
-    <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber">手机号授权登录</button>
+    <view class="section-title">微信登录</view>
+    <button class="primary-btn" bindtap="loginWithCode" loading="{{loading}}">微信一键登录</button>
     <button class="ghost-btn" bindtap="goStaffLogin">员工登录入口</button>
-  </view>
-
-  <view class="section">
-    <view class="section-title">手动输入</view>
-    <view class="form-row">
-      <input class="input" type="number" maxlength="11" placeholder="请输入手机号" bindinput="onManualPhoneInput" value="{{manualPhone}}" />
-      <button class="primary-btn" loading="{{loading}}" bindtap="onManualSubmit">使用手机号登录</button>
-    </view>
-    <view class="info-text">未能授权时可直接输入手机号登录</view>
   </view>
 </view>

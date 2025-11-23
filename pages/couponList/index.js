@@ -5,11 +5,13 @@ const app = getApp();
 Page({
   data: {
     coupons: [],
-    qrReady: false
+    qrReady: false,
+    role: 'user'
   },
 
   onShow() {
     if (!this.ensureLogin()) return;
+    this.setData({ role: app.globalData.userInfo?.role || 'user' });
     this.fetchCoupons();
   },
 

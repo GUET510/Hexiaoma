@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { nanoid } from 'nanoid';
 import { db, columnExists } from './db.js';
@@ -36,6 +37,9 @@ const findTemplate = (id) => templates.find((tpl) => tpl.id === id);
 const isValidPhone = (phone) => /^\d{11}$/.test((phone || '').toString());
 
 const SECRET_KEY = process.env.COUPON_SECRET || 'hexiaoma-secret';
+if (!SECRET_KEY || SECRET_KEY === 'hexiaoma-secret') {
+  console.warn('[SECURITY] 使用了默认 SECRET_KEY，请尽快在环境变量中设置 COUPON_SECRET');
+}
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 const beijingNow = () => new Date(Date.now() + 8 * 60 * 60 * 1000);
 const formatDateTime = (date) => {
@@ -251,7 +255,20 @@ app.post('/auth/loginByPhone', async (req, res) => {
       res.status(400).json({ message: '该手机号未登记为员工' });
       return;
     }
-    if (employee.password && password && employee.password !== password) {
+    if (!employee.password) {
+      res.status(500).json({ message: '员工密码未设置，请联系管理员' });
+      return;
+    }
+    let ok = false;
+    try {
+      ok = await bcrypt.compare(password || '', employee.password);
+    } catch (err) {
+      ok = false;
+    }
+    if (!ok && employee.password === password) {
+      ok = true;
+    }
+    if (!ok) {
       res.status(401).json({ message: '密码错误' });
       return;
     }
@@ -261,9 +278,7 @@ app.post('/auth/loginByPhone', async (req, res) => {
     return;
   }
 
-  const user = ensureUser({ phone, role: 'user', openid, unionid });
-  recordAudit(user, 'login', 'user', user.id, 'customer login');
-  res.json(await buildTokenResponse(user));
+  res.status(400).json({ message: '普通用户请使用微信授权登录' });
 });
 
 app.post('/auth/loginByCode', async (req, res) => {
@@ -272,8 +287,35 @@ app.post('/auth/loginByCode', async (req, res) => {
     res.status(400).json({ message: 'code required' });
     return;
   }
-  const openid = `code_${code}`;
-  const user = ensureUser({ openid, unionid: unionid || null, role: 'user' });
+  const appId = process.env.WX_APPID;
+  const secret = process.env.WX_SECRET;
+  let openid = null;
+  let wxUnionid = null;
+
+  try {
+    if (appId && secret) {
+      const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${secret}&js_code=${encodeURIComponent(
+        code
+      )}&grant_type=authorization_code`;
+      const wxResp = await fetch(url);
+      const wxData = await wxResp.json();
+      openid = wxData?.openid || null;
+      wxUnionid = wxData?.unionid || null;
+      if (!openid) {
+        res.status(400).json({ message: wxData?.errmsg || '微信登录失败，请稍后再试' });
+        return;
+      }
+    } else {
+      console.warn('[SECURITY] 缺少 WX_APPID/WX_SECRET，使用本地 openid 模拟，仅用于开发环境');
+      openid = `code_${code}`;
+    }
+  } catch (err) {
+    console.error('loginByCode error', err);
+    res.status(500).json({ message: '调用微信登录失败，请稍后再试' });
+    return;
+  }
+
+  const user = ensureUser({ openid, unionid: unionid || wxUnionid || null, role: 'user' });
   recordAudit(user, 'login', 'user', user.id, 'wx code');
   res.json(await buildTokenResponse(user));
 });
@@ -315,7 +357,7 @@ app.get('/coupon/list', async (req, res) => {
 });
 
 app.post('/coupon/create', async (req, res) => {
-  const user = await requireAuth(req, res);
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
   if (!user) return;
   const { templateId, phone, idempotencyKey } = req.body || {};
   if (!templateId) {
@@ -363,7 +405,7 @@ app.post('/coupon/create', async (req, res) => {
 });
 
 app.post('/coupon/verify', async (req, res) => {
-  const operator = await requireAuth(req, res, ['staff', 'manager']);
+  const operator = await requireAuth(req, res, ['staff', 'manager', 'super']);
   if (!operator) return;
   const { code, idempotencyKey } = req.body || {};
   if (!code) {
@@ -391,6 +433,10 @@ app.post('/coupon/verify', async (req, res) => {
     res.status(400).json({ message: '优惠券签名无效或已过期' });
     return;
   }
+  if (row.store_id && operator.store_id && row.store_id !== operator.store_id) {
+    res.status(403).json({ message: '不允许跨门店核销该优惠券' });
+    return;
+  }
   const created = row.created_at ? new Date(row.created_at.replace(/ /g, 'T')) : null;
   if (created && row.valid_days) {
     const expire = new Date(created.getTime() + Number(row.valid_days) * 24 * 60 * 60 * 1000);
@@ -400,23 +446,35 @@ app.post('/coupon/verify', async (req, res) => {
     }
   }
   const usedAt = beijingTimestamp();
-  db.prepare('UPDATE coupon_instances SET status = ?, used_at = ? WHERE id = ?').run('used', usedAt, row.id);
+  const updateResult = db
+    .prepare("UPDATE coupon_instances SET status = 'used', used_at = ? WHERE id = ? AND status = 'active'")
+    .run(usedAt, row.id);
+  if (updateResult.changes === 0) {
+    res.status(409).json({ message: '优惠券已被核销，请勿重复操作' });
+    return;
+  }
   db.prepare('INSERT INTO coupon_verify_logs (coupon_id, operator_id, store_id, action, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(row.id, operator.id, operator.store_id || null, 'verify', usedAt);
   recordAudit(operator, 'verify_coupon', 'coupon', row.id, `by ${operator.id}`);
   res.json({ message: '核销成功', usedAt, operator: { id: operator.id, storeId: operator.store_id } });
 });
 
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body || {};
-  if (username === 'admin' && password === 'password') {
-    res.json({ role: 'super', username: 'admin' });
-  } else {
+  const adminUser = process.env.ADMIN_USER || 'admin';
+  const adminPass = process.env.ADMIN_PASS || 'password';
+  if (username !== adminUser || password !== adminPass) {
     res.status(401).json({ message: '账号或密码错误' });
+    return;
   }
+  const user = ensureUser({ phone: `admin:${username}`, role: 'super' });
+  recordAudit(user, 'login', 'user', user.id, 'admin login');
+  res.json(await buildTokenResponse(user));
 });
 
-app.get('/api/admin/stores', (req, res) => {
+app.get('/api/admin/stores', async (req, res) => {
+  const user = await requireAuth(req, res, ['super']);
+  if (!user) return;
   const stores = db
     .prepare(
       `SELECT stores.*, sm.phone as manager_phone, sm.id as manager_id FROM stores
@@ -434,7 +492,9 @@ app.get('/api/admin/stores', (req, res) => {
   res.json({ stores });
 });
 
-app.post('/api/admin/stores', (req, res) => {
+app.post('/api/admin/stores', async (req, res) => {
+  const user = await requireAuth(req, res, ['super']);
+  if (!user) return;
   const { name } = req.body || {};
   if (!name) {
     res.status(400).json({ message: '门店名称必填' });
@@ -446,7 +506,9 @@ app.post('/api/admin/stores', (req, res) => {
   res.status(201).json({ store: { id: store.id, name: store.name, createdAt: store.created_at } });
 });
 
-app.post('/api/admin/store-managers', (req, res) => {
+app.post('/api/admin/store-managers', async (req, res) => {
+  const user = await requireAuth(req, res, ['super']);
+  if (!user) return;
   const { storeId, name, phone, password } = req.body || {};
   if (!storeId || !name || !phone || !password) {
     res.status(400).json({ message: 'storeId, name, phone, password 必填' });
@@ -471,8 +533,9 @@ app.post('/api/admin/store-managers', (req, res) => {
     res.status(400).json({ message: '该门店管理员已存在' });
     return;
   }
+  const passwordHash = await bcrypt.hash(password, 10);
   db.prepare('INSERT INTO store_managers (id, store_id, name, phone, password) VALUES (?, ?, ?, ?, ?)')
-    .run(managerId, storeId, name, phone, password);
+    .run(managerId, storeId, name, phone, passwordHash);
   const manager = db.prepare('SELECT * FROM store_managers WHERE id = ?').get(managerId);
   res.status(201).json({
     manager: {
@@ -485,7 +548,7 @@ app.post('/api/admin/store-managers', (req, res) => {
   });
 });
 
-app.post('/api/manager/login', (req, res) => {
+app.post('/api/manager/login', async (req, res) => {
   const { phone, password } = req.body || {};
   if (!phone || !password) {
     res.status(400).json({ message: 'phone 和 password 必填' });
@@ -496,14 +559,32 @@ app.post('/api/manager/login', (req, res) => {
     return;
   }
   const manager = getManagerByPhone(phone);
-  if (!manager || manager.password !== password) {
+  if (!manager || !manager.password) {
     res.status(401).json({ message: '账号或密码错误' });
     return;
   }
-  res.json({ managerId: manager.id, storeId: manager.store_id, name: manager.name, phone: manager.phone });
+  let ok = false;
+  try {
+    ok = await bcrypt.compare(password || '', manager.password);
+  } catch (err) {
+    ok = false;
+  }
+  if (!ok && manager.password === password) {
+    ok = true;
+  }
+  if (!ok) {
+    res.status(401).json({ message: '账号或密码错误' });
+    return;
+  }
+  const user = ensureUser({ phone, role: 'manager', storeId: manager.store_id });
+  recordAudit(user, 'login', 'user', user.id, 'manager login');
+  const tokenRes = await buildTokenResponse(user);
+  res.json({ ...tokenRes, manager: { managerId: manager.id, storeId: manager.store_id, name: manager.name, phone: manager.phone } });
 });
 
-app.get('/api/general-coupons', (req, res) => {
+app.get('/api/general-coupons', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const query = (req.query.query || '').trim();
   const rows = query
     ? db
@@ -514,7 +595,9 @@ app.get('/api/general-coupons', (req, res) => {
   res.json({ templates: rows.map(serializeGeneralCoupon) });
 });
 
-app.post('/api/general-coupons', (req, res) => {
+app.post('/api/general-coupons', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const { name, brand, amount, minSpend, durationDays, couponType } = req.body || {};
   const amountValue = Number(amount);
   const minSpendValue = Number(minSpend) || 0;
@@ -552,7 +635,9 @@ app.post('/api/general-coupons', (req, res) => {
   }
 });
 
-app.put('/api/general-coupons/:id', (req, res) => {
+app.put('/api/general-coupons/:id', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const id = Number(req.params.id);
   const template = getGeneralCouponById(id);
   if (!template) {
@@ -582,7 +667,9 @@ app.put('/api/general-coupons/:id', (req, res) => {
   res.json({ template: serializeGeneralCoupon(updated) });
 });
 
-app.post('/api/general-coupons/:id/down', (req, res) => {
+app.post('/api/general-coupons/:id/down', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const id = Number(req.params.id);
   const template = getGeneralCouponById(id);
   if (!template) {
@@ -594,7 +681,9 @@ app.post('/api/general-coupons/:id/down', (req, res) => {
   res.json({ template: serializeGeneralCoupon(updated) });
 });
 
-app.post('/api/general-coupons/:id/duplicate', (req, res) => {
+app.post('/api/general-coupons/:id/duplicate', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const id = Number(req.params.id);
   const template = getGeneralCouponById(id);
   if (!template) {
@@ -618,7 +707,9 @@ app.post('/api/general-coupons/:id/duplicate', (req, res) => {
   res.status(201).json({ template: serializeGeneralCoupon(created) });
 });
 
-app.get('/api/customers', (req, res) => {
+app.get('/api/customers', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const phone = (req.query.phone || '').trim();
   const requestStoreId = req.query.storeId ? Number(req.query.storeId) : null;
   const storeId = couponsHasStoreId ? requestStoreId : null;
@@ -659,7 +750,9 @@ app.get('/api/customers', (req, res) => {
   res.json({ customers });
 });
 
-app.get('/api/employees', (req, res) => {
+app.get('/api/employees', async (req, res) => {
+  const user = await requireAuth(req, res, ['super', 'manager']);
+  if (!user) return;
   const phone = (req.query.phone || '').trim();
   const storeId = req.query.storeId ? Number(req.query.storeId) : null;
   const storeClause = storeId ? 'AND store_id = @storeId' : '';
@@ -685,7 +778,9 @@ app.get('/api/employees', (req, res) => {
   });
 });
 
-app.post('/api/employees', (req, res) => {
+app.post('/api/employees', async (req, res) => {
+  const user = await requireAuth(req, res, ['super', 'manager']);
+  if (!user) return;
   const { name, phone, storeId, password } = req.body || {};
   if (!name || !phone || !storeId || !password) {
     res.status(400).json({ message: 'name, phone, storeId, password are required' });
@@ -707,8 +802,9 @@ app.post('/api/employees', (req, res) => {
   }
   const id = nextEmployeeId();
   const staffCode = nextStaffCode(storeId);
+  const passwordHash = await bcrypt.hash(password, 10);
   db.prepare('INSERT INTO employees (id, name, phone, store_id, staff_code, password) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, name, phone, storeId, staffCode, password || '');
+    .run(id, name, phone, storeId, staffCode, passwordHash);
   const created = getEmployeeById(id);
   res.status(201).json({
     employee: { id: created.id, name: created.name, phone: created.phone, storeId: created.store_id, staffCode }
@@ -770,7 +866,9 @@ app.get('/api/coupons', (req, res) => {
   res.json({ coupons: coupons.map(serializeCoupon) });
 });
 
-app.get('/api/admin/coupons', (req, res) => {
+app.get('/api/admin/coupons', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const query = (req.query.query || '').trim();
   const requestStoreId = req.query.storeId ? Number(req.query.storeId) : null;
   const storeId = couponsHasStoreId ? requestStoreId : null;
@@ -796,7 +894,9 @@ app.get('/api/admin/coupons', (req, res) => {
   res.json({ coupons: rows.map((row) => serializeCoupon(row, true)) });
 });
 
-app.post('/api/coupons', (req, res) => {
+app.post('/api/coupons', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const { customerId, templateId } = req.body || {};
   if (!customerId || !templateId) {
     res.status(400).json({ message: 'customerId and templateId are required' });
@@ -818,7 +918,9 @@ app.post('/api/coupons', (req, res) => {
   res.status(201).json({ coupon: serializeCoupon(coupon) });
 });
 
-app.post('/api/issue-coupons', (req, res) => {
+app.post('/api/issue-coupons', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
   const { customerId, phone, templateId, quantity, storeId: issueStoreId } = req.body || {};
   const qty = Number(quantity) || 0;
   if (!templateId) {

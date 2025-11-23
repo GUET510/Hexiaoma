@@ -3,8 +3,11 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { nanoid } from 'nanoid';
 import { db, columnExists } from './db.js';
+import { cacheKind, idem, sessionStore, throttle } from './cache.js';
 import { runMigrations } from './migrate.js';
 import templates from './templates.js';
 
@@ -17,6 +20,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false
+  })
+);
 
 app.use(express.static(path.join(__dirname, '..', 'web')));
 
@@ -25,6 +36,7 @@ const findTemplate = (id) => templates.find((tpl) => tpl.id === id);
 const isValidPhone = (phone) => /^\d{11}$/.test((phone || '').toString());
 
 const SECRET_KEY = process.env.COUPON_SECRET || 'hexiaoma-secret';
+const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 const beijingNow = () => new Date(Date.now() + 8 * 60 * 60 * 1000);
 const formatDateTime = (date) => {
   const pad = (n) => String(n).padStart(2, '0');
@@ -33,19 +45,31 @@ const formatDateTime = (date) => {
   )}:${pad(date.getSeconds())}`;
 };
 
-const signToken = (userId) => {
-  const ts = Date.now().toString();
-  const sig = crypto.createHmac('sha256', SECRET_KEY).update(`${userId}.${ts}`).digest('hex');
-  return `${userId}.${ts}.${sig}`;
+const signToken = async (user) => {
+  const sessionId = nanoid(12);
+  const payload = {
+    sub: user.id,
+    role: user.role,
+    brandId: user.brand_id || null,
+    storeId: user.store_id || null,
+    sid: sessionId
+  };
+  const token = jwt.sign(payload, SECRET_KEY, { expiresIn: TOKEN_TTL_SECONDS });
+  await sessionStore.save(sessionId, payload, TOKEN_TTL_SECONDS);
+  return token;
 };
 
-const parseToken = (token) => {
+const parseToken = async (token) => {
   if (!token) return null;
-  const [id, ts, sig] = token.split('.');
-  if (!id || !ts || !sig) return null;
-  const expected = crypto.createHmac('sha256', SECRET_KEY).update(`${id}.${ts}`).digest('hex');
-  if (expected !== sig) return null;
-  return Number(id);
+  try {
+    const payload = jwt.verify(token, SECRET_KEY);
+    if (!payload?.sid) return payload;
+    const session = await sessionStore.load(payload.sid);
+    if (!session) return null;
+    return payload;
+  } catch (err) {
+    return null;
+  }
 };
 
 const beijingTimestamp = () => formatDateTime(beijingNow());
@@ -116,35 +140,48 @@ const ensureCustomer = (phone) => {
   return customer;
 };
 
-const ensureUser = ({ phone, role = 'user', openid = null, brandId = null, storeId = null }) => {
+const ensureUser = ({ phone, role = 'user', openid = null, unionid = null, brandId = null, storeId = null }) => {
   let user = phone ? getUserByPhone(phone) : null;
   if (!user && openid) {
     user = getUserByOpenid(openid);
   }
+  if (!user && unionid) {
+    user = db.prepare('SELECT * FROM users WHERE unionid = ?').get(unionid);
+  }
   if (!user) {
     const result = db
-      .prepare('INSERT INTO users (openid, phone, role, brand_id, store_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(openid, phone || null, role, brandId, storeId, beijingTimestamp());
+      .prepare('INSERT INTO users (openid, unionid, phone, role, brand_id, store_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(openid, unionid, phone || null, role, brandId, storeId, beijingTimestamp());
     user = getUserById(result.lastInsertRowid);
-  } else if (role && user.role !== role) {
-    db.prepare('UPDATE users SET role = ?, brand_id = ?, store_id = ? WHERE id = ?').run(role, brandId, storeId, user.id);
-    user = getUserById(user.id);
+  } else {
+    db.prepare('UPDATE users SET openid = COALESCE(?, openid), unionid = COALESCE(?, unionid) WHERE id = ?')
+      .run(openid, unionid, user.id);
+    if (role && user.role !== role) {
+      db.prepare('UPDATE users SET role = ?, brand_id = ?, store_id = ? WHERE id = ?').run(role, brandId, storeId, user.id);
+      user = getUserById(user.id);
+    }
   }
   if (phone) ensureCustomer(phone);
   return user;
 };
 
-const buildTokenResponse = (user) => ({ token: signToken(user.id), user });
+const buildTokenResponse = async (user) => ({ token: await signToken(user), user });
 
-const requireAuth = (req, res, roles = []) => {
+const recordAudit = (user, action, targetType, targetId, detail = '') => {
+  db.prepare(
+    'INSERT INTO audit_logs (actor_id, actor_role, action, target_type, target_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)' // prettier-ignore
+  ).run(user?.id || null, user?.role || null, action, targetType, targetId ? String(targetId) : null, detail, beijingTimestamp());
+};
+
+const requireAuth = async (req, res, roles = []) => {
   const raw = req.headers.authorization || '';
   const token = raw.replace(/Bearer\s+/i, '');
-  const userId = parseToken(token);
-  if (!userId) {
+  const payload = await parseToken(token);
+  if (!payload?.sub) {
     res.status(401).json({ message: '未登录或凭证失效' });
     return null;
   }
-  const user = getUserById(userId);
+  const user = getUserById(payload.sub);
   if (!user) {
     res.status(401).json({ message: '未找到用户' });
     return null;
@@ -156,11 +193,24 @@ const requireAuth = (req, res, roles = []) => {
   return user;
 };
 
-const generateCode = () => {
+const generateSignedCode = ({ validDays }) => {
   const random = crypto.randomBytes(6).toString('hex');
-  const ts = Date.now().toString();
-  const sig = crypto.createHmac('sha256', SECRET_KEY).update(`${random}.${ts}`).digest('hex').slice(0, 10);
-  return `${random}${sig}${ts.slice(-4)}`;
+  const ts = Date.now();
+  const expiresAt = validDays ? new Date(ts + Number(validDays) * 24 * 60 * 60 * 1000) : null;
+  const payload = `${random}.${expiresAt ? expiresAt.getTime() : 'na'}`;
+  const signature = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
+  return { code: random, signature, expiresAt: expiresAt ? formatDateTime(new Date(expiresAt)) : null };
+};
+
+const verifySignedCode = (code, signature, expiresAt) => {
+  if (!code || !signature) return false;
+  const expected = crypto.createHmac('sha256', SECRET_KEY).update(`${code}.${expiresAt ? new Date(expiresAt).getTime() : 'na'}`).digest('hex');
+  if (expected !== signature) return false;
+  if (expiresAt) {
+    const expire = new Date(expiresAt.replace(/ /g, 'T'));
+    if (beijingNow() > expire) return false;
+  }
+  return true;
 };
 
 // Cache column support to avoid runtime SQL errors on legacy databases
@@ -183,10 +233,15 @@ app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/auth/loginByPhone', (req, res) => {
-  const { phone, password, role } = req.body || {};
+app.post('/auth/loginByPhone', async (req, res) => {
+  const { phone, password, role, openid, unionid } = req.body || {};
   if (!isValidPhone(phone)) {
     res.status(400).json({ message: '手机号必须为11位数字' });
+    return;
+  }
+
+  if (!(await throttle(`login:${phone}`, 20, 60))) {
+    res.status(429).json({ message: '尝试过于频繁，请稍后重试' });
     return;
   }
 
@@ -200,24 +255,27 @@ app.post('/auth/loginByPhone', (req, res) => {
       res.status(401).json({ message: '密码错误' });
       return;
     }
-    const user = ensureUser({ phone, role: 'staff', storeId: employee.store_id });
-    res.json(buildTokenResponse(user));
+    const user = ensureUser({ phone, role: 'staff', storeId: employee.store_id, openid, unionid, brandId: employee.brand_id });
+    recordAudit(user, 'login', 'user', user.id, 'staff login');
+    res.json(await buildTokenResponse(user));
     return;
   }
 
-  const user = ensureUser({ phone, role: 'user' });
-  res.json(buildTokenResponse(user));
+  const user = ensureUser({ phone, role: 'user', openid, unionid });
+  recordAudit(user, 'login', 'user', user.id, 'customer login');
+  res.json(await buildTokenResponse(user));
 });
 
-app.post('/auth/loginByCode', (req, res) => {
-  const { code } = req.body || {};
+app.post('/auth/loginByCode', async (req, res) => {
+  const { code, unionid } = req.body || {};
   if (!code) {
     res.status(400).json({ message: 'code required' });
     return;
   }
   const openid = `code_${code}`;
-  const user = ensureUser({ openid, role: 'user' });
-  res.json(buildTokenResponse(user));
+  const user = ensureUser({ openid, unionid: unionid || null, role: 'user' });
+  recordAudit(user, 'login', 'user', user.id, 'wx code');
+  res.json(await buildTokenResponse(user));
 });
 
 app.get('/coupon/templates', (req, res) => {
@@ -227,8 +285,8 @@ app.get('/coupon/templates', (req, res) => {
   res.json({ templates: rows });
 });
 
-app.get('/coupon/list', (req, res) => {
-  const user = requireAuth(req, res);
+app.get('/coupon/list', async (req, res) => {
+  const user = await requireAuth(req, res);
   if (!user) return;
   const rows = db
     .prepare(
@@ -250,17 +308,22 @@ app.get('/coupon/list', (req, res) => {
       validDays: row.valid_days,
       status: row.status,
       createdAt: row.created_at,
+      expiresAt: row.expires_at,
       usedAt: row.used_at
     }))
   });
 });
 
-app.post('/coupon/create', (req, res) => {
-  const user = requireAuth(req, res);
+app.post('/coupon/create', async (req, res) => {
+  const user = await requireAuth(req, res);
   if (!user) return;
-  const { templateId, phone } = req.body || {};
+  const { templateId, phone, idempotencyKey } = req.body || {};
   if (!templateId) {
     res.status(400).json({ message: 'templateId is required' });
+    return;
+  }
+  if (idempotencyKey && !(await idem(`coupon:create:${idempotencyKey}`, 300))) {
+    res.status(409).json({ message: '重复提交，请稍后再试' });
     return;
   }
   const tpl = db.prepare('SELECT * FROM coupon_templates WHERE id = ?').get(templateId);
@@ -276,32 +339,39 @@ app.post('/coupon/create', (req, res) => {
     }
     targetUser = ensureUser({ phone, role: 'user' });
   }
-  const code = generateCode();
+  const { code, signature, expiresAt } = generateSignedCode({ validDays: tpl.valid_days });
   const createdAt = beijingTimestamp();
   const stmt = db.prepare(
-    'INSERT INTO coupon_instances (template_id, code, user_id, sales_id, store_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO coupon_instances (template_id, code, signature, user_id, sales_id, store_id, brand_id, status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
-  stmt.run(tpl.id, code, targetUser.id, user.id, user.store_id || null, 'active', createdAt);
+  stmt.run(tpl.id, code, signature, targetUser.id, user.id, user.store_id || null, user.brand_id || null, 'active', createdAt, expiresAt);
+  recordAudit(user, 'create_coupon', 'coupon', tpl.id, `instance for ${targetUser.id}`);
   res.status(201).json({
     coupon: {
       templateId: tpl.id,
       code,
+      signature,
       name: tpl.name,
       couponType: tpl.discount_type,
       value: tpl.value,
       validDays: tpl.valid_days,
       status: 'active',
-      createdAt
+      createdAt,
+      expiresAt
     }
   });
 });
 
-app.post('/coupon/verify', (req, res) => {
-  const operator = requireAuth(req, res, ['staff', 'manager']);
+app.post('/coupon/verify', async (req, res) => {
+  const operator = await requireAuth(req, res, ['staff', 'manager']);
   if (!operator) return;
-  const { code } = req.body || {};
+  const { code, idempotencyKey } = req.body || {};
   if (!code) {
     res.status(400).json({ message: 'code is required' });
+    return;
+  }
+  if (idempotencyKey && !(await idem(`coupon:verify:${idempotencyKey}`, 120))) {
+    res.status(409).json({ message: '请勿重复核销' });
     return;
   }
   const row = db
@@ -317,6 +387,10 @@ app.post('/coupon/verify', (req, res) => {
     res.status(400).json({ message: '优惠券不可核销' });
     return;
   }
+  if (!verifySignedCode(row.code, row.signature, row.expires_at)) {
+    res.status(400).json({ message: '优惠券签名无效或已过期' });
+    return;
+  }
   const created = row.created_at ? new Date(row.created_at.replace(/ /g, 'T')) : null;
   if (created && row.valid_days) {
     const expire = new Date(created.getTime() + Number(row.valid_days) * 24 * 60 * 60 * 1000);
@@ -329,7 +403,8 @@ app.post('/coupon/verify', (req, res) => {
   db.prepare('UPDATE coupon_instances SET status = ?, used_at = ? WHERE id = ?').run('used', usedAt, row.id);
   db.prepare('INSERT INTO coupon_verify_logs (coupon_id, operator_id, store_id, action, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(row.id, operator.id, operator.store_id || null, 'verify', usedAt);
-  res.json({ message: '核销成功', usedAt });
+  recordAudit(operator, 'verify_coupon', 'coupon', row.id, `by ${operator.id}`);
+  res.json({ message: '核销成功', usedAt, operator: { id: operator.id, storeId: operator.store_id } });
 });
 
 app.post('/api/admin/login', (req, res) => {

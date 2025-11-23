@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import knex from 'knex';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +12,15 @@ fs.mkdirSync(dataDir, { recursive: true });
 
 const dbFile = path.join(dataDir, 'hexiaoma.sqlite');
 const db = new Database(dbFile);
+
+// Optional relational connector (MySQL / PostgreSQL) for production deployments
+const relational = process.env.DB_CLIENT
+  ? knex({
+      client: process.env.DB_CLIENT,
+      connection: process.env.DB_URL,
+      pool: { min: 0, max: 10 }
+    })
+  : null;
 
 db.pragma('journal_mode = WAL');
 
@@ -24,6 +34,7 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   openid TEXT,
+  unionid TEXT,
   phone TEXT UNIQUE,
   role TEXT NOT NULL DEFAULT 'user',
   brand_id INTEGER,
@@ -88,11 +99,14 @@ CREATE TABLE IF NOT EXISTS coupon_instances (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   template_id INTEGER NOT NULL,
   code TEXT NOT NULL UNIQUE,
+  signature TEXT,
   user_id INTEGER NOT NULL,
   sales_id INTEGER,
   store_id INTEGER,
+  brand_id INTEGER,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+  expires_at TEXT,
   used_at TEXT,
   FOREIGN KEY(template_id) REFERENCES coupon_templates(id),
   FOREIGN KEY(user_id) REFERENCES users(id)
@@ -106,6 +120,17 @@ CREATE TABLE IF NOT EXISTS coupon_verify_logs (
   action TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
   FOREIGN KEY(coupon_id) REFERENCES coupon_instances(id)
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_id INTEGER,
+  actor_role TEXT,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS coupons (
@@ -159,5 +184,9 @@ ensureColumn('coupons', 'used_by_staff_phone', 'TEXT');
 ensureColumn('employees', 'store_id', 'INTEGER');
 ensureColumn('employees', 'staff_code', 'TEXT UNIQUE');
 ensureColumn('employees', 'password', 'TEXT');
+ensureColumn('coupon_instances', 'signature', 'TEXT');
+ensureColumn('coupon_instances', 'expires_at', 'TEXT');
+ensureColumn('coupon_instances', 'brand_id', 'INTEGER');
+ensureColumn('users', 'unionid', 'TEXT');
 
-export { db, columnExists, ensureColumn };
+export { db, relational, columnExists, ensureColumn };

@@ -6,6 +6,19 @@ const normalizeUrl = (url) => {
   return `${base}${url}`;
 };
 
+const resetAuth = () => {
+  try {
+    wx.removeStorageSync('token');
+    wx.removeStorageSync('userInfo');
+  } catch (e) {}
+  const app = getApp();
+  if (app && app.globalData) {
+    app.globalData.token = '';
+    app.globalData.userInfo = null;
+  }
+  wx.reLaunch({ url: '/pages/login/index' });
+};
+
 const request = ({ url, method = 'GET', data = {}, header = {}, loading = true, loadingText = '加载中' }) => {
   const app = getApp();
   const token = wx.getStorageSync('token') || (app && app.globalData && app.globalData.token);
@@ -27,6 +40,12 @@ const request = ({ url, method = 'GET', data = {}, header = {}, loading = true, 
       data,
       header: finalHeaders,
       success: (res) => {
+        if (res.statusCode === 401) {
+          wx.showToast({ title: res.data?.message || '登录已过期，请重新登录', icon: 'none' });
+          resetAuth();
+          reject(res.data || res);
+          return;
+        }
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.data);
         } else {

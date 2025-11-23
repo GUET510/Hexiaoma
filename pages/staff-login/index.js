@@ -31,7 +31,7 @@ Page({
     request({
       url: '/auth/loginByPhone',
       method: 'POST',
-      data: { phone, password, role: 'staff' }
+      data: { phone, password, role: 'staff', openid: app.globalData?.userInfo?.openid, unionid: app.globalData?.userInfo?.unionid }
     })
       .then((res) => {
         if (res && res.token && res.user) {

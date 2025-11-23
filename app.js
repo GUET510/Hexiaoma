@@ -6,7 +6,8 @@ App({
   globalData: {
     apiBaseUrl: defaultApiBase,
     token: '',
-    userInfo: null
+    userInfo: null,
+    lastWxCode: ''
   },
 
   onLaunch() {
@@ -21,6 +22,7 @@ App({
     wx.login({
       success: (res) => {
         if (!res.code) return;
+        this.globalData.lastWxCode = res.code;
         request({
           url: '/auth/loginByCode',
           method: 'POST',

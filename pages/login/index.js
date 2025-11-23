@@ -48,7 +48,7 @@ Page({
     request({
       url: '/auth/loginByPhone',
       method: 'POST',
-      data: { phone }
+      data: { phone, openid: app.globalData?.userInfo?.openid, unionid: app.globalData?.userInfo?.unionid, code: app.globalData?.lastWxCode }
     })
       .then((res) => {
         if (res && res.token && res.user) {

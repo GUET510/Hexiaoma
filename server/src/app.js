@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { db, columnExists } from './db.js';
 import { runMigrations } from './migrate.js';
@@ -22,6 +23,32 @@ app.use(express.static(path.join(__dirname, '..', 'web')));
 const findTemplate = (id) => templates.find((tpl) => tpl.id === id);
 
 const isValidPhone = (phone) => /^\d{11}$/.test((phone || '').toString());
+
+const SECRET_KEY = process.env.COUPON_SECRET || 'hexiaoma-secret';
+const beijingNow = () => new Date(Date.now() + 8 * 60 * 60 * 1000);
+const formatDateTime = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}:${pad(date.getSeconds())}`;
+};
+
+const signToken = (userId) => {
+  const ts = Date.now().toString();
+  const sig = crypto.createHmac('sha256', SECRET_KEY).update(`${userId}.${ts}`).digest('hex');
+  return `${userId}.${ts}.${sig}`;
+};
+
+const parseToken = (token) => {
+  if (!token) return null;
+  const [id, ts, sig] = token.split('.');
+  if (!id || !ts || !sig) return null;
+  const expected = crypto.createHmac('sha256', SECRET_KEY).update(`${id}.${ts}`).digest('hex');
+  if (expected !== sig) return null;
+  return Number(id);
+};
+
+const beijingTimestamp = () => formatDateTime(beijingNow());
 
 const getGeneralCouponById = (id) =>
   db.prepare('SELECT * FROM general_coupons WHERE id = ?').get(id);
@@ -75,11 +102,234 @@ const serializeGeneralCoupon = (row) => ({
   updatedAt: row.updated_at
 });
 
+const getUserById = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+const getUserByOpenid = (openid) => db.prepare('SELECT * FROM users WHERE openid = ?').get(openid);
+const getUserByPhone = (phone) => db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
+
+const ensureCustomer = (phone) => {
+  if (!phone) return null;
+  let customer = db.prepare('SELECT * FROM customers WHERE phone = ?').get(phone);
+  if (!customer) {
+    const result = db.prepare('INSERT INTO customers (phone) VALUES (?)').run(phone);
+    customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
+  }
+  return customer;
+};
+
+const ensureUser = ({ phone, role = 'user', openid = null, brandId = null, storeId = null }) => {
+  let user = phone ? getUserByPhone(phone) : null;
+  if (!user && openid) {
+    user = getUserByOpenid(openid);
+  }
+  if (!user) {
+    const result = db
+      .prepare('INSERT INTO users (openid, phone, role, brand_id, store_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(openid, phone || null, role, brandId, storeId, beijingTimestamp());
+    user = getUserById(result.lastInsertRowid);
+  } else if (role && user.role !== role) {
+    db.prepare('UPDATE users SET role = ?, brand_id = ?, store_id = ? WHERE id = ?').run(role, brandId, storeId, user.id);
+    user = getUserById(user.id);
+  }
+  if (phone) ensureCustomer(phone);
+  return user;
+};
+
+const buildTokenResponse = (user) => ({ token: signToken(user.id), user });
+
+const requireAuth = (req, res, roles = []) => {
+  const raw = req.headers.authorization || '';
+  const token = raw.replace(/Bearer\s+/i, '');
+  const userId = parseToken(token);
+  if (!userId) {
+    res.status(401).json({ message: '未登录或凭证失效' });
+    return null;
+  }
+  const user = getUserById(userId);
+  if (!user) {
+    res.status(401).json({ message: '未找到用户' });
+    return null;
+  }
+  if (roles.length && !roles.includes(user.role)) {
+    res.status(403).json({ message: '无权限' });
+    return null;
+  }
+  return user;
+};
+
+const generateCode = () => {
+  const random = crypto.randomBytes(6).toString('hex');
+  const ts = Date.now().toString();
+  const sig = crypto.createHmac('sha256', SECRET_KEY).update(`${random}.${ts}`).digest('hex').slice(0, 10);
+  return `${random}${sig}${ts.slice(-4)}`;
+};
+
 // Cache column support to avoid runtime SQL errors on legacy databases
 const couponsHasStoreId = columnExists('coupons', 'store_id');
 
+const seedTemplates = () => {
+  const row = db.prepare('SELECT COUNT(1) as count FROM coupon_templates').get();
+  if (row?.count > 0) return;
+  db.prepare(
+    'INSERT INTO coupon_templates (name, discount_type, value, valid_days, brand_id, created_at) VALUES (?, ?, ?, ?, ?, ?)' // prettier-ignore
+  ).run('满200减50', '全场满减卷', 50, 30, 1, beijingTimestamp());
+  db.prepare(
+    'INSERT INTO coupon_templates (name, discount_type, value, valid_days, brand_id, created_at) VALUES (?, ?, ?, ?, ?, ?)' // prettier-ignore
+  ).run('油卡券500元', '全场代金卷', 500, 60, 1, beijingTimestamp());
+};
+
+seedTemplates();
+
 app.get('/health', (req, res) => {
   res.json({ ok: true });
+});
+
+app.post('/auth/loginByPhone', (req, res) => {
+  const { phone, password, role } = req.body || {};
+  if (!isValidPhone(phone)) {
+    res.status(400).json({ message: '手机号必须为11位数字' });
+    return;
+  }
+
+  if (role === 'staff') {
+    const employee = getEmployeeByPhone(phone);
+    if (!employee) {
+      res.status(400).json({ message: '该手机号未登记为员工' });
+      return;
+    }
+    if (employee.password && password && employee.password !== password) {
+      res.status(401).json({ message: '密码错误' });
+      return;
+    }
+    const user = ensureUser({ phone, role: 'staff', storeId: employee.store_id });
+    res.json(buildTokenResponse(user));
+    return;
+  }
+
+  const user = ensureUser({ phone, role: 'user' });
+  res.json(buildTokenResponse(user));
+});
+
+app.post('/auth/loginByCode', (req, res) => {
+  const { code } = req.body || {};
+  if (!code) {
+    res.status(400).json({ message: 'code required' });
+    return;
+  }
+  const openid = `code_${code}`;
+  const user = ensureUser({ openid, role: 'user' });
+  res.json(buildTokenResponse(user));
+});
+
+app.get('/coupon/templates', (req, res) => {
+  const rows = db
+    .prepare('SELECT id, name, discount_type, value, valid_days, brand_id, created_at FROM coupon_templates ORDER BY created_at DESC')
+    .all();
+  res.json({ templates: rows });
+});
+
+app.get('/coupon/list', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const rows = db
+    .prepare(
+      `SELECT ci.*, ct.name, ct.discount_type, ct.value, ct.valid_days
+       FROM coupon_instances ci
+       LEFT JOIN coupon_templates ct ON ci.template_id = ct.id
+       WHERE ci.user_id = ?
+       ORDER BY ci.created_at DESC`
+    )
+    .all(user.id);
+  res.json({
+    coupons: rows.map((row) => ({
+      id: row.id,
+      templateId: row.template_id,
+      code: row.code,
+      name: row.name,
+      couponType: row.discount_type,
+      value: row.value,
+      validDays: row.valid_days,
+      status: row.status,
+      createdAt: row.created_at,
+      usedAt: row.used_at
+    }))
+  });
+});
+
+app.post('/coupon/create', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const { templateId, phone } = req.body || {};
+  if (!templateId) {
+    res.status(400).json({ message: 'templateId is required' });
+    return;
+  }
+  const tpl = db.prepare('SELECT * FROM coupon_templates WHERE id = ?').get(templateId);
+  if (!tpl) {
+    res.status(404).json({ message: '模板不存在' });
+    return;
+  }
+  let targetUser = user;
+  if (phone) {
+    if (!isValidPhone(phone)) {
+      res.status(400).json({ message: '手机号必须为11位数字' });
+      return;
+    }
+    targetUser = ensureUser({ phone, role: 'user' });
+  }
+  const code = generateCode();
+  const createdAt = beijingTimestamp();
+  const stmt = db.prepare(
+    'INSERT INTO coupon_instances (template_id, code, user_id, sales_id, store_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  stmt.run(tpl.id, code, targetUser.id, user.id, user.store_id || null, 'active', createdAt);
+  res.status(201).json({
+    coupon: {
+      templateId: tpl.id,
+      code,
+      name: tpl.name,
+      couponType: tpl.discount_type,
+      value: tpl.value,
+      validDays: tpl.valid_days,
+      status: 'active',
+      createdAt
+    }
+  });
+});
+
+app.post('/coupon/verify', (req, res) => {
+  const operator = requireAuth(req, res, ['staff', 'manager']);
+  if (!operator) return;
+  const { code } = req.body || {};
+  if (!code) {
+    res.status(400).json({ message: 'code is required' });
+    return;
+  }
+  const row = db
+    .prepare(
+      `SELECT ci.*, ct.valid_days FROM coupon_instances ci LEFT JOIN coupon_templates ct ON ct.id = ci.template_id WHERE ci.code = ?`
+    )
+    .get(code);
+  if (!row) {
+    res.status(404).json({ message: '优惠券不存在' });
+    return;
+  }
+  if (row.status !== 'active') {
+    res.status(400).json({ message: '优惠券不可核销' });
+    return;
+  }
+  const created = row.created_at ? new Date(row.created_at.replace(/ /g, 'T')) : null;
+  if (created && row.valid_days) {
+    const expire = new Date(created.getTime() + Number(row.valid_days) * 24 * 60 * 60 * 1000);
+    if (beijingNow() > expire) {
+      res.status(400).json({ message: '优惠券已过期' });
+      return;
+    }
+  }
+  const usedAt = beijingTimestamp();
+  db.prepare('UPDATE coupon_instances SET status = ?, used_at = ? WHERE id = ?').run('used', usedAt, row.id);
+  db.prepare('INSERT INTO coupon_verify_logs (coupon_id, operator_id, store_id, action, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(row.id, operator.id, operator.store_id || null, 'verify', usedAt);
+  res.json({ message: '核销成功', usedAt });
 });
 
 app.post('/api/admin/login', (req, res) => {

@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="section">
+    <view class="section-title">选择优惠券模板</view>
+    <view class="template" wx:for="{{templates}}" wx:key="id" data-id="{{item.id}}" bindtap="onSelectTemplate">
+      <view class="template-head">
+        <view>
+          <view class="name">{{item.name}}</view>
+          <view class="meta">{{item.discount_type || item.couponType}} · {{item.brand || '通用品牌'}}</view>
+        </view>
+        <radio value="{{item.id}}" checked="{{selectedId === item.id}}" />
+      </view>
+      <view class="meta">金额：{{item.amount || item.value}} 元</view>
+      <view class="meta">有效期：{{item.valid_days || item.duration_days}} 天</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">发放给</view>
+    <input class="input" placeholder="留空默认发给自己" type="number" maxlength="11" bindinput="onPhoneInput" />
+    <button class="primary-btn" bindtap="submit" loading="{{submitting}}">创建优惠券</button>
+  </view>
+</view>

@@ -1,0 +1,28 @@
+.page {
+  padding: 24rpx;
+}
+
+.template {
+  border: 2rpx solid var(--border-subtle);
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+  background: #f8fafc;
+}
+
+.template-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.name {
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: 24rpx;
+  margin-top: 6rpx;
+}

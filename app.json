@@ -1,7 +1,8 @@
 {
   "pages": [
     "pages/login/index",
-    "pages/index/index",
+    "pages/couponList/index",
+    "pages/createCoupon/index",
     "pages/verify/index",
     "pages/staff-login/index"
   ],

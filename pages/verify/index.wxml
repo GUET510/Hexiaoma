@@ -1,15 +1,11 @@
 <view class="page">
   <view class="section">
-    <view class="section-title">员工扫码核销</view>
-    <view class="info-text">使用微信扫一扫核销优惠券（需员工登录）。</view>
-    <button class="primary-btn" bindtap="scanCoupon">扫一扫核销</button>
-  </view>
-
-  <view class="section">
-    <view class="section-title">手动核销</view>
-    <view class="info-text">输入或粘贴核销码完成核销，需员工权限。</view>
-    <input class="ghost-btn" style="margin-top:12rpx;padding-left:16rpx;" placeholder="输入优惠券核销码" value="{{scanInput}}" bindinput="onScanInput"/>
-    <button class="ghost-btn" style="margin-top:12rpx;" bindtap="verifyManual">手动核销</button>
-    <view wx:if="verifyMessage" class="info-text" style="margin-top:12rpx;">{{verifyMessage}}</view>
+    <view class="section-title">核销工具</view>
+    <view class="form-row">
+      <input class="input" placeholder="请输入或扫描核销码" bindinput="onInput" />
+      <button class="primary-btn" bindtap="submitManual">手动核销</button>
+      <button class="ghost-btn" bindtap="scanCode">扫码核销</button>
+    </view>
+    <view class="info-text">需要员工账号登录后使用核销功能</view>
   </view>
 </view>

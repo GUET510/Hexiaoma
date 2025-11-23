@@ -1,71 +1,63 @@
+const { request } = require('../../utils/request');
 const app = getApp();
 
 Page({
   data: {
-    scanInput: '',
-    verifyMessage: ''
-  },
-
-  onLoad() {
-    this.ensureStaffLogin();
+    codeInput: ''
   },
 
   onShow() {
-    this.ensureStaffLogin();
+    this.guardStaff();
   },
 
-  ensureStaffLogin() {
-    const storedPhone = wx.getStorageSync('staffPhone');
-    const storedStaffId = wx.getStorageSync('staffId');
-    if (!storedPhone || !storedStaffId) {
+  guardStaff() {
+    const user = app.globalData.userInfo || wx.getStorageSync('userInfo');
+    const token = app.globalData.token || wx.getStorageSync('token');
+    if (!user || !token) {
       wx.reLaunch({ url: '/pages/staff-login/index' });
-    } else {
-      app.globalData.staffPhone = storedPhone;
-      app.globalData.staffId = storedStaffId;
+      return false;
     }
+    if (user.role !== 'staff' && user.role !== 'manager') {
+      wx.showToast({ title: '请使用员工账号登录', icon: 'none' });
+      wx.reLaunch({ url: '/pages/staff-login/index' });
+      return false;
+    }
+    app.cacheUser?.(user, token);
+    return true;
   },
 
-  scanCoupon() {
+  onInput(e) {
+    this.setData({ codeInput: (e.detail.value || '').trim() });
+  },
+
+  scanCode() {
+    if (!this.guardStaff()) return;
     wx.scanCode({
-      onlyFromCamera: false,
       success: (res) => {
-        this.verifyCoupon(res.result);
-      },
-      fail: () => {
-        wx.showToast({ title: '扫码失败', icon: 'none' });
+        const code = res.result;
+        this.verify(code);
       }
     });
   },
 
-  onScanInput(e) {
-    this.setData({ scanInput: e.detail.value });
-  },
-
-  verifyManual() {
-    this.verifyCoupon(this.data.scanInput);
-  },
-
-  verifyCoupon(code) {
-    const normalized = (code || '').trim();
-    if (!normalized) {
+  submitManual() {
+    if (!this.guardStaff()) return;
+    const code = this.data.codeInput;
+    if (!code) {
       wx.showToast({ title: '请输入核销码', icon: 'none' });
       return;
     }
-    wx.request({
-      url: `${app.globalData.apiBaseUrl}/api/staff/verify`,
-      method: 'POST',
-      data: { staffId: app.globalData.staffId || wx.getStorageSync('staffId'), code: normalized },
-      success: (res) => {
-        if (res.data && res.data.success) {
-          wx.showToast({ title: '核销成功', icon: 'success' });
-          this.setData({ verifyMessage: '核销成功', scanInput: '' });
-        } else {
-          this.setData({ verifyMessage: res.data && res.data.message ? res.data.message : '核销失败' });
-        }
-      },
-      fail: () => {
-        wx.showToast({ title: '网络异常，稍后再试', icon: 'none' });
-      }
-    });
+    this.verify(code);
+  },
+
+  verify(code) {
+    request({ url: '/coupon/verify', method: 'POST', data: { code } })
+      .then(() => {
+        wx.showToast({ title: '核销成功', icon: 'success' });
+      })
+      .catch((err) => {
+        if (!err?.message) return;
+        wx.showToast({ title: err.message, icon: 'none' });
+      });
   }
 });

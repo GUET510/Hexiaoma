@@ -1,0 +1,20 @@
+<view class="card">
+  <view class="card-head">
+    <view>
+      <view class="title">{{coupon.title || coupon.name || '优惠券'}}</view>
+      <view class="subtitle">{{coupon.brand || '通用品牌'}} · {{coupon.couponType || coupon.type || '优惠券'}}</view>
+    </view>
+    <view class="badge">{{coupon.amount ? coupon.amount + '元' : (coupon.value || '')}}</view>
+  </view>
+  <view class="meta">
+    <text>编号：{{coupon.serial || coupon.code || '--'}}</text>
+    <text wx:if="{{coupon.storeName || coupon.storeScope}}">门店：{{coupon.storeName || coupon.storeScope}}</text>
+  </view>
+  <view class="meta">
+    <text>有效期：{{coupon.validityText || '长期有效'}} </text>
+    <text wx:if="{{coupon.status && showStatus}}">状态：{{coupon.statusLabel || coupon.status}}</text>
+  </view>
+  <view class="code" wx:if="{{showCode}}">
+    <text class="code-text">核销码：{{coupon.code || '--'}} </text>
+  </view>
+</view>

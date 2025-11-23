@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "coupon-card": "/components/CouponCard/index",
+    "stat-bar": "/components/StatBar/index"
+  }
+}

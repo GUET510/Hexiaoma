@@ -21,6 +21,16 @@ CREATE TABLE IF NOT EXISTS customers (
   created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  openid TEXT,
+  phone TEXT UNIQUE,
+  role TEXT NOT NULL DEFAULT 'user',
+  brand_id INTEGER,
+  store_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
+);
+
 CREATE TABLE IF NOT EXISTS employees (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -62,6 +72,40 @@ CREATE TABLE IF NOT EXISTS general_coupons (
   next_serial INTEGER NOT NULL DEFAULT 10000,
   created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
   updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS coupon_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  discount_type TEXT,
+  value INTEGER,
+  valid_days INTEGER,
+  brand_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
+);
+
+CREATE TABLE IF NOT EXISTS coupon_instances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_id INTEGER NOT NULL,
+  code TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL,
+  sales_id INTEGER,
+  store_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+  used_at TEXT,
+  FOREIGN KEY(template_id) REFERENCES coupon_templates(id),
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS coupon_verify_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  coupon_id INTEGER NOT NULL,
+  operator_id INTEGER,
+  store_id INTEGER,
+  action TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+  FOREIGN KEY(coupon_id) REFERENCES coupon_instances(id)
 );
 
 CREATE TABLE IF NOT EXISTS coupons (

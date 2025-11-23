@@ -1,0 +1,10 @@
+<view class="stat-bar">
+  <view class="item">
+    <view class="label">剩余次数</view>
+    <view class="value">{{stats.remain || 0}}</view>
+  </view>
+  <view class="item">
+    <view class="label">有效期</view>
+    <view class="value">{{stats.validityText || '长期有效'}} </view>
+  </view>
+</view>

@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="section">
+    <view class="section-title">我的优惠券</view>
+    <view class="actions">
+      <button class="ghost-btn" bindtap="goCreate">去发券</button>
+      <button class="ghost-btn" bindtap="goVerify">核销工具</button>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{coupons.length}}">
+    <view class="coupon-item" wx:for="{{coupons}}" wx:key="id">
+      <coupon-card coupon="{{item}}" show-status="true" />
+      <stat-bar stats="{{ { remain: item.status === 'used' ? 0 : 1, validityText: item.validityText } }}" />
+      <view class="qr-box">
+        <image wx:if="{{item.qrImage}}" class="qr-img" mode="aspectFit" src="{{item.qrImage}}" />
+        <canvas wx:else type="2d" class="qr-canvas" id="qr-{{item.id}}"></canvas>
+      </view>
+    </view>
+  </view>
+  <view class="section" wx:else>
+    <view class="info-text">暂无优惠券，先去发券吧</view>
+  </view>
+</view>

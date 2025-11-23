@@ -1,35 +1,32 @@
+const { request } = require('../../utils/request');
 const app = getApp();
 
 Page({
   data: {
-    phoneDisplay: '未授权',
-    loading: false,
-    manualPhone: ''
-  },
-
-  goStaffLogin() {
-    wx.navigateTo({ url: '/pages/staff-login/index' });
+    manualPhone: '',
+    loading: false
   },
 
   onLoad() {
-    const storedPhone = wx.getStorageSync('userPhone');
-    const storedCustomerId = wx.getStorageSync('customerId');
-    if (storedPhone && storedCustomerId) {
-      app.globalData.userPhone = storedPhone;
-      app.globalData.customerId = storedCustomerId;
-      wx.reLaunch({ url: '/pages/index/index' });
+    if (app.globalData.userInfo && app.globalData.token) {
+      wx.reLaunch({ url: '/pages/couponList/index' });
+      return;
+    }
+    const storedUser = wx.getStorageSync('userInfo');
+    const storedToken = wx.getStorageSync('token');
+    if (storedUser && storedToken) {
+      app.cacheUser?.(storedUser, storedToken);
+      wx.reLaunch({ url: '/pages/couponList/index' });
     }
   },
 
   onGetPhoneNumber(e) {
-    const directPhone = e.detail.errMsg === 'getPhoneNumber:ok' ? e.detail.phoneNumber : '';
-
-    if (directPhone) {
-      this.registerCustomer(directPhone);
+    const phone = e.detail?.phoneNumber;
+    if (!phone) {
+      wx.showToast({ title: '未获取到授权手机号', icon: 'none' });
       return;
     }
-
-    wx.showToast({ title: '未获取到授权手机号，请重试或手动输入', icon: 'none' });
+    this.loginWithPhone(phone);
   },
 
   onManualPhoneInput(e) {
@@ -37,47 +34,36 @@ Page({
   },
 
   onManualSubmit() {
-    const manualPhone = (this.data.manualPhone || '').trim();
-    if (!manualPhone) {
-      wx.showToast({ title: '请先输入手机号', icon: 'none' });
+    const phone = (this.data.manualPhone || '').trim();
+    if (!/^\d{11}$/.test(phone)) {
+      wx.showToast({ title: '请输入11位手机号', icon: 'none' });
       return;
     }
-    if (manualPhone.length !== 11) {
-      wx.showToast({ title: '手机号需为11位', icon: 'none' });
-      return;
-    }
-    this.registerCustomer(manualPhone);
+    this.loginWithPhone(phone);
   },
 
-  registerCustomer(phone) {
+  loginWithPhone(phone) {
     if (this.data.loading) return;
     this.setData({ loading: true });
-    const apiBaseUrl = app.globalData.apiBaseUrl;
-
-    wx.request({
-      url: `${apiBaseUrl}/api/login`,
+    request({
+      url: '/auth/loginByPhone',
       method: 'POST',
-      data: { phone },
-      success: (res) => {
-        const { customerId, phone: savedPhone } = res.data || {};
-        const phoneDisplay = savedPhone || phone;
-        if (!customerId) {
-          wx.showToast({ title: '登录失败，稍后重试', icon: 'none' });
-          return;
+      data: { phone }
+    })
+      .then((res) => {
+        if (res && res.token && res.user) {
+          app.cacheUser(res.user, res.token);
+          wx.showToast({ title: '登录成功', icon: 'success' });
+          wx.reLaunch({ url: '/pages/couponList/index' });
         }
-        app.globalData.userPhone = phoneDisplay;
-        app.globalData.customerId = customerId;
-        wx.setStorageSync('userPhone', phoneDisplay);
-        wx.setStorageSync('customerId', customerId);
-        wx.showToast({ title: '登录成功', icon: 'success' });
-        wx.reLaunch({ url: '/pages/index/index' });
-      },
-      fail: () => {
-        wx.showToast({ title: '网络异常，请检查后端服务', icon: 'none' });
-      },
-      complete: () => {
+      })
+      .catch(() => {})
+      .finally(() => {
         this.setData({ loading: false });
-      }
-    });
+      });
+  },
+
+  goStaffLogin() {
+    wx.navigateTo({ url: '/pages/staff-login/index' });
   }
 });

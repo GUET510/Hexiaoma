@@ -13,6 +13,7 @@
 - **JWT + 会话**：登录返回 JWT，服务端并行缓存会话 sid，过期或被清理后自动失效，所有接口统一校验 Authorization 头。
 - **权限与审计**：角色覆盖品牌/门店/销售（user/staff/manager/super），敏感操作写入 `audit_logs`（登录、发券、核销）。
 - **风险控制**：接口级限流（express-rate-limit）、幂等键（发券/核销要求 idempotencyKey）与签名核销码（后端生成 code+signature+有效期校验），核销时强校验签名、有效期、一次性使用并记录核销人/时间。
+- **密钥与配置**：生产环境必须设置 `COUPON_SECRET`（默认值会直接阻断启动），并配置微信 `WX_APPID/WX_SECRET` 以走真实 code2session。
 
 ## 小程序前端改造
 - 页面模块化：发券、券列表、核销拆分为 `/pages/createCoupon/index`、`/pages/couponList/index`、`/pages/verify/index`，登录页下方保留员工登录入口。
@@ -62,7 +63,7 @@ npm start  # 默认 http://localhost:3000
   - `POST /coupon/create`：`{ templateId, phone?, idempotencyKey? }` 生成券实例，后端返回签名后的 `{ code, signature, expiresAt }`，仅展示不在前端拼装。
   - `GET /coupon/list`：当前登录用户的券实例列表（包含签名与有效期）。
   - `POST /coupon/verify`：员工核销接口，需提供 idempotencyKey；校验权限/状态/签名/有效期，写入核销日志并记录核销人、核销时间。
-- 原有通用接口：
+- 原有通用接口（默认关闭，如需调试请设置 `ENABLE_LEGACY_API=true`）：
   - `POST /api/login`：`{ phone }` → `{ customerId, phone }`
   - `GET /api/customers[?phone=xxx]`：返回用户及已发券/已核销数量，可按手机号模糊搜索。
   - `GET /api/coupons?customerId=xxx`：返回该客户全部优惠券。

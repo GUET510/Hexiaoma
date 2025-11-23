@@ -38,8 +38,13 @@ const isValidPhone = (phone) => /^\d{11}$/.test((phone || '').toString());
 
 const SECRET_KEY = process.env.COUPON_SECRET || 'hexiaoma-secret';
 if (!SECRET_KEY || SECRET_KEY === 'hexiaoma-secret') {
-  console.warn('[SECURITY] 使用了默认 SECRET_KEY，请尽快在环境变量中设置 COUPON_SECRET');
+  const msg = '[SECURITY] 使用了默认 SECRET_KEY，请尽快在环境变量中设置 COUPON_SECRET';
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(msg);
+  }
+  console.warn(msg);
 }
+const ENABLE_LEGACY_API = process.env.ENABLE_LEGACY_API === 'true';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 const beijingNow = () => new Date(Date.now() + 8 * 60 * 60 * 1000);
 const formatDateTime = (date) => {
@@ -208,7 +213,8 @@ const generateSignedCode = ({ validDays }) => {
 
 const verifySignedCode = (code, signature, expiresAt) => {
   if (!code || !signature) return false;
-  const expected = crypto.createHmac('sha256', SECRET_KEY).update(`${code}.${expiresAt ? new Date(expiresAt).getTime() : 'na'}`).digest('hex');
+  const payload = `${code}.${expiresAt ? new Date(expiresAt).getTime() : 'na'}`;
+  const expected = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
   if (expected !== signature) return false;
   if (expiresAt) {
     const expire = new Date(expiresAt.replace(/ /g, 'T'));
@@ -265,9 +271,6 @@ app.post('/auth/loginByPhone', async (req, res) => {
     } catch (err) {
       ok = false;
     }
-    if (!ok && employee.password === password) {
-      ok = true;
-    }
     if (!ok) {
       res.status(401).json({ message: '密码错误' });
       return;
@@ -306,6 +309,11 @@ app.post('/auth/loginByCode', async (req, res) => {
         return;
       }
     } else {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[SECURITY] 生产环境缺少 WX_APPID/WX_SECRET');
+        res.status(500).json({ message: '系统配置错误，请联系管理员' });
+        return;
+      }
       console.warn('[SECURITY] 缺少 WX_APPID/WX_SECRET，使用本地 openid 模拟，仅用于开发环境');
       openid = `code_${code}`;
     }
@@ -811,7 +819,8 @@ app.post('/api/employees', async (req, res) => {
   });
 });
 
-app.post('/api/login', (req, res) => {
+if (ENABLE_LEGACY_API) {
+  app.post('/api/login', (req, res) => {
   const phone = (req.body.phone || '').toString();
   if (!phone) {
     res.status(400).json({ message: 'phone is required' });
@@ -829,9 +838,9 @@ app.post('/api/login', (req, res) => {
     record = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
   }
   res.json({ customerId: record.id, phone: record.phone, createdAt: record.created_at });
-});
+  });
 
-app.post('/api/staff/login', (req, res) => {
+  app.post('/api/staff/login', (req, res) => {
   const phone = (req.body.phone || '').toString();
   const password = (req.body.password || '').toString();
   if (!phone || !password) {
@@ -854,9 +863,9 @@ app.post('/api/staff/login', (req, res) => {
     phone: employee.phone,
     storeId: employee.store_id
   });
-});
+  });
 
-app.get('/api/coupons', (req, res) => {
+  app.get('/api/coupons', (req, res) => {
   const customerId = req.query.customerId;
   if (!customerId) {
     res.status(400).json({ message: 'customerId is required' });
@@ -864,7 +873,7 @@ app.get('/api/coupons', (req, res) => {
   }
   const coupons = db.prepare('SELECT * FROM coupons WHERE customer_id = ? ORDER BY created_at DESC').all(customerId);
   res.json({ coupons: coupons.map(serializeCoupon) });
-});
+  });
 
 app.get('/api/admin/coupons', async (req, res) => {
   const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
@@ -894,7 +903,7 @@ app.get('/api/admin/coupons', async (req, res) => {
   res.json({ coupons: rows.map((row) => serializeCoupon(row, true)) });
 });
 
-app.post('/api/coupons', async (req, res) => {
+  app.post('/api/coupons', async (req, res) => {
   const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
   if (!user) return;
   const { customerId, templateId } = req.body || {};
@@ -916,7 +925,8 @@ app.post('/api/coupons', async (req, res) => {
   stmt.run(customerId, template.id, code, template.title, template.faceValue, template.category);
   const coupon = db.prepare('SELECT * FROM coupons WHERE code = ?').get(code);
   res.status(201).json({ coupon: serializeCoupon(coupon) });
-});
+  });
+}
 
 app.post('/api/issue-coupons', async (req, res) => {
   const user = await requireAuth(req, res, ['staff', 'manager', 'super']);

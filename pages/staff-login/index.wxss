@@ -1,11 +1,13 @@
 .page {
-  padding: 32rpx;
+  padding: var(--space-xl) var(--space-lg);
+  background: radial-gradient(circle at top, #15161f 0, #050608 60%);
+  min-height: 100vh;
 }
 
 .section {
-  margin-top: 32rpx;
+  margin-top: var(--space-lg);
 }
 
 .form-row {
-  margin-top: 12rpx;
+  margin-top: var(--space-sm);
 }

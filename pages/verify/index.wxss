@@ -1,7 +1,9 @@
 .page {
-  padding: 24rpx;
+  padding: var(--space-lg);
+  background: linear-gradient(to bottom, #050608, #0a0b10);
+  min-height: 100vh;
 }
 
 .form-row {
-  gap: 12rpx;
+  gap: var(--space-sm);
 }

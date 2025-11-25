@@ -1,24 +1,26 @@
 .page {
-  padding: 24rpx;
+  padding: var(--space-lg);
+  background: linear-gradient(to bottom, #050608, #0a0b10);
+  min-height: 100vh;
 }
 
 .actions {
   display: flex;
-  gap: 16rpx;
-  margin-top: 12rpx;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
 }
 
 .coupon-item {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
-  margin-bottom: 20rpx;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
 .qr-box {
   display: flex;
   justify-content: center;
-  padding: 12rpx 0;
+  padding: var(--space-sm) 0;
 }
 
 .qr-canvas,

@@ -1,13 +1,16 @@
 .page {
-  padding: 24rpx;
+  padding: var(--space-lg);
+  background: linear-gradient(to bottom, #050608, #0a0b10);
+  min-height: 100vh;
 }
 
 .template {
-  border: 2rpx solid var(--border-subtle);
-  border-radius: 12rpx;
-  padding: 20rpx;
-  margin-bottom: 16rpx;
-  background: #f8fafc;
+  border: 1rpx solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
 .template-head {
@@ -17,12 +20,13 @@
 }
 
 .name {
-  font-size: 30rpx;
+  font-size: var(--font-title-md);
   font-weight: 700;
+  color: var(--color-text-main);
 }
 
 .meta {
-  color: var(--text-secondary);
-  font-size: 24rpx;
-  margin-top: 6rpx;
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  margin-top: var(--space-xs);
 }

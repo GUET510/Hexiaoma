@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { requireRole } = require('../../utils/auth');
 const app = getApp();
 
 Page({
@@ -7,23 +8,7 @@ Page({
   },
 
   onShow() {
-    this.guardStaff();
-  },
-
-  guardStaff() {
-    const user = app.globalData.userInfo || wx.getStorageSync('userInfo');
-    const token = app.globalData.token || wx.getStorageSync('token');
-    if (!user || !token) {
-      wx.reLaunch({ url: '/pages/staff-login/index' });
-      return false;
-    }
-    if (user.role !== 'staff' && user.role !== 'manager') {
-      wx.showToast({ title: '请使用员工账号登录', icon: 'none' });
-      wx.reLaunch({ url: '/pages/staff-login/index' });
-      return false;
-    }
-    app.cacheUser?.(user, token);
-    return true;
+    requireRole(['staff', 'manager', 'super'], { redirect: '/pages/staff-login/index' });
   },
 
   onInput(e) {
@@ -31,7 +16,7 @@ Page({
   },
 
   scanCode() {
-    if (!this.guardStaff()) return;
+    if (!requireRole(['staff', 'manager', 'super'], { redirect: '/pages/staff-login/index' })) return;
     wx.scanCode({
       success: (res) => {
         const code = res.result;
@@ -41,7 +26,7 @@ Page({
   },
 
   submitManual() {
-    if (!this.guardStaff()) return;
+    if (!requireRole(['staff', 'manager', 'super'], { redirect: '/pages/staff-login/index' })) return;
     const code = this.data.codeInput;
     if (!code) {
       wx.showToast({ title: '请输入核销码', icon: 'none' });

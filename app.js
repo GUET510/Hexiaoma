@@ -1,10 +1,9 @@
 const { request } = require('./utils/request');
-
-const defaultApiBase = 'http://localhost:3000';
+const { getApiBaseUrl } = require('./utils/config');
 
 App({
   globalData: {
-    apiBaseUrl: defaultApiBase,
+    apiBaseUrl: getApiBaseUrl(),
     token: '',
     userInfo: null,
     lastWxCode: ''

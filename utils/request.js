@@ -49,7 +49,12 @@ const request = ({ url, method = 'GET', data = {}, header = {}, loading = true, 
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.data);
         } else {
-          wx.showToast({ title: res.data?.message || '请求失败', icon: 'none' });
+          const message = res.data?.message;
+          if (res.statusCode >= 500) {
+            wx.showToast({ title: '系统繁忙，请稍后再试', icon: 'none' });
+          } else {
+            wx.showToast({ title: message || '请求失败', icon: 'none' });
+          }
           reject(res.data || res);
         }
       },

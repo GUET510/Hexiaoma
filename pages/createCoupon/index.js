@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { requireRole } = require('../../utils/auth');
 const app = getApp();
 
 Page({
@@ -10,20 +11,8 @@ Page({
   },
 
   onShow() {
-    if (!this.ensureLogin()) return;
+    if (!requireRole(['staff', 'manager', 'super'])) return;
     this.loadTemplates();
-  },
-
-  ensureLogin() {
-    if (app.globalData.userInfo && app.globalData.token) return true;
-    const storedUser = wx.getStorageSync('userInfo');
-    const storedToken = wx.getStorageSync('token');
-    if (storedUser && storedToken) {
-      app.cacheUser?.(storedUser, storedToken);
-      return true;
-    }
-    wx.reLaunch({ url: '/pages/login/index' });
-    return false;
   },
 
   loadTemplates() {

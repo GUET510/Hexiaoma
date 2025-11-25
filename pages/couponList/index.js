@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request');
 const { makeQrToCanvas } = require('../../utils/qrcode');
+const { ensureUser } = require('../../utils/auth');
 const app = getApp();
 
 Page({
@@ -10,21 +11,10 @@ Page({
   },
 
   onShow() {
-    if (!this.ensureLogin()) return;
+    const auth = ensureUser();
+    if (!auth) return;
     this.setData({ role: app.globalData.userInfo?.role || 'user' });
     this.fetchCoupons();
-  },
-
-  ensureLogin() {
-    if (app.globalData.userInfo && app.globalData.token) return true;
-    const storedUser = wx.getStorageSync('userInfo');
-    const storedToken = wx.getStorageSync('token');
-    if (storedUser && storedToken) {
-      app.cacheUser?.(storedUser, storedToken);
-      return true;
-    }
-    wx.reLaunch({ url: '/pages/login/index' });
-    return false;
   },
 
   fetchCoupons() {

@@ -10,7 +10,6 @@ import { nanoid } from 'nanoid';
 import { db, columnExists } from './db.js';
 import { cacheKind, idem, sessionStore, throttle } from './cache.js';
 import { runMigrations } from './migrate.js';
-import templates from './templates.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,8 +49,6 @@ app.use(
 
 app.use(express.static(path.join(__dirname, '..', 'web')));
 
-const findTemplate = (id) => templates.find((tpl) => tpl.id === id);
-
 const isValidPhone = (phone) => /^\d{11}$/.test((phone || '').toString());
 
 const SECRET_KEY = process.env.COUPON_SECRET || 'hexiaoma-secret';
@@ -62,7 +59,6 @@ if (!SECRET_KEY || SECRET_KEY === 'hexiaoma-secret') {
   }
   console.warn(msg);
 }
-const ENABLE_LEGACY_API = process.env.ENABLE_LEGACY_API === 'true';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 const beijingNow = () => new Date(Date.now() + 8 * 60 * 60 * 1000);
 const formatDateTime = (date) => {
@@ -778,6 +774,34 @@ app.get('/api/customers', async (req, res) => {
   res.json({ customers });
 });
 
+app.get('/api/admin/coupons', async (req, res) => {
+  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
+  if (!user) return;
+  const query = (req.query.query || '').trim();
+  const requestStoreId = req.query.storeId ? Number(req.query.storeId) : null;
+  const storeId = couponsHasStoreId ? requestStoreId : null;
+  const storeWhere = storeId ? 'AND coupons.store_id = @storeId' : '';
+  const rows = query
+    ? db
+        .prepare(
+          `SELECT coupons.*, customers.phone as customer_phone FROM coupons
+           LEFT JOIN customers ON customers.id = coupons.customer_id
+           WHERE (coupons.serial LIKE @q OR coupons.title LIKE @q OR customers.phone LIKE @q) ${storeWhere}
+           ORDER BY coupons.created_at DESC`
+        )
+        .all({ q: `%${query}%`, storeId })
+    : db
+        .prepare(
+          `SELECT coupons.*, customers.phone as customer_phone FROM coupons
+           LEFT JOIN customers ON customers.id = coupons.customer_id
+           WHERE 1=1 ${storeWhere}
+           ORDER BY coupons.created_at DESC`
+        )
+        .all({ storeId });
+
+  res.json({ coupons: rows.map((row) => serializeCoupon(row, true)) });
+});
+
 app.get('/api/employees', async (req, res) => {
   const user = await requireAuth(req, res, ['super', 'manager']);
   if (!user) return;
@@ -839,116 +863,7 @@ app.post('/api/employees', async (req, res) => {
   });
 });
 
-if (ENABLE_LEGACY_API) {
-  app.post('/api/login', (req, res) => {
-  const phone = (req.body.phone || '').toString();
-  if (!phone) {
-    res.status(400).json({ message: 'phone is required' });
-    return;
-  }
-  if (!isValidPhone(phone)) {
-    res.status(400).json({ message: '手机号必须为11位数字' });
-    return;
-  }
-  const existing = db.prepare('SELECT * FROM customers WHERE phone = ?').get(phone);
-  let record = existing;
-  if (!existing) {
-    const stmt = db.prepare('INSERT INTO customers (phone) VALUES (?)');
-    const result = stmt.run(phone);
-    record = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
-  }
-  res.json({ customerId: record.id, phone: record.phone, createdAt: record.created_at });
-  });
-
-  app.post('/api/staff/login', (req, res) => {
-  const phone = (req.body.phone || '').toString();
-  const password = (req.body.password || '').toString();
-  if (!phone || !password) {
-    res.status(400).json({ message: 'phone and password are required' });
-    return;
-  }
-  if (!isValidPhone(phone)) {
-    res.status(400).json({ message: '手机号必须为11位数字' });
-    return;
-  }
-  const employee = getEmployeeByPhone(phone);
-  if (!employee || (employee.password && employee.password !== password)) {
-    res.status(404).json({ message: '该手机号未注册员工或密码错误' });
-    return;
-  }
-  res.json({
-    staffId: employee.staff_code || employee.id,
-    id: employee.id,
-    name: employee.name,
-    phone: employee.phone,
-    storeId: employee.store_id
-  });
-  });
-
-  app.get('/api/coupons', (req, res) => {
-  const customerId = req.query.customerId;
-  if (!customerId) {
-    res.status(400).json({ message: 'customerId is required' });
-    return;
-  }
-  const coupons = db.prepare('SELECT * FROM coupons WHERE customer_id = ? ORDER BY created_at DESC').all(customerId);
-  res.json({ coupons: coupons.map(serializeCoupon) });
-  });
-
-app.get('/api/admin/coupons', async (req, res) => {
-  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
-  if (!user) return;
-  const query = (req.query.query || '').trim();
-  const requestStoreId = req.query.storeId ? Number(req.query.storeId) : null;
-  const storeId = couponsHasStoreId ? requestStoreId : null;
-  const storeWhere = storeId ? 'AND coupons.store_id = @storeId' : '';
-  const rows = query
-    ? db
-        .prepare(
-          `SELECT coupons.*, customers.phone as customer_phone FROM coupons
-           LEFT JOIN customers ON customers.id = coupons.customer_id
-           WHERE (coupons.serial LIKE @q OR coupons.title LIKE @q OR customers.phone LIKE @q) ${storeWhere}
-           ORDER BY coupons.created_at DESC`
-        )
-        .all({ q: `%${query}%`, storeId })
-    : db
-        .prepare(
-          `SELECT coupons.*, customers.phone as customer_phone FROM coupons
-           LEFT JOIN customers ON customers.id = coupons.customer_id
-           WHERE 1=1 ${storeWhere}
-           ORDER BY coupons.created_at DESC`
-        )
-        .all({ storeId });
-
-  res.json({ coupons: rows.map((row) => serializeCoupon(row, true)) });
-});
-
-  app.post('/api/coupons', async (req, res) => {
-  const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
-  if (!user) return;
-  const { customerId, templateId } = req.body || {};
-  if (!customerId || !templateId) {
-    res.status(400).json({ message: 'customerId and templateId are required' });
-    return;
-  }
-  const template = findTemplate(templateId);
-  if (!template) {
-    res.status(400).json({ message: 'unknown templateId' });
-    return;
-  }
-  const timestamp = Date.now();
-  const code = `HX-${template.faceValue}-${timestamp}-${nanoid(6).toUpperCase()}`;
-  const stmt = db.prepare(`
-    INSERT INTO coupons (customer_id, template_id, code, title, face_value, category, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'active')
-  `);
-  stmt.run(customerId, template.id, code, template.title, template.faceValue, template.category);
-  const coupon = db.prepare('SELECT * FROM coupons WHERE code = ?').get(code);
-  res.status(201).json({ coupon: serializeCoupon(coupon) });
-  });
-}
-
-app.post('/api/issue-coupons', async (req, res) => {
+  app.post('/api/issue-coupons', async (req, res) => {
   const user = await requireAuth(req, res, ['staff', 'manager', 'super']);
   if (!user) return;
   const { customerId, phone, templateId, quantity, storeId: issueStoreId } = req.body || {};
@@ -1070,64 +985,6 @@ app.post('/api/issue-coupons', async (req, res) => {
   ).run({ count: qty, id: template.id });
 
   res.status(201).json({ coupons: issued });
-});
-
-app.post('/api/coupons/verify', (req, res) => {
-  const { customerId, code } = req.body || {};
-  if (!customerId || !code) {
-    res.status(400).json({ message: 'customerId and code are required' });
-    return;
-  }
-  const coupon = db.prepare('SELECT * FROM coupons WHERE code = ? AND customer_id = ?').get(code, customerId);
-  if (!coupon) {
-    res.status(404).json({ success: false, message: '未找到该核销码' });
-    return;
-  }
-  if (coupon.status === 'used') {
-    res.status(400).json({ success: false, message: '该优惠券已核销' });
-    return;
-  }
-  db.prepare(
-    "UPDATE coupons SET status = ?, used_at = datetime('now','+8 hours'), used_by_staff_id = NULL, used_by_staff_name = NULL, used_by_staff_phone = NULL WHERE id = ?"
-  ).run('used', coupon.id);
-  if (coupon.template_base_id) {
-    db.prepare('UPDATE general_coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.template_base_id);
-  }
-  const updated = db.prepare('SELECT * FROM coupons WHERE id = ?').get(coupon.id);
-  res.json({ success: true, coupon: serializeCoupon(updated) });
-});
-
-app.post('/api/staff/verify', (req, res) => {
-  const { staffId, code } = req.body || {};
-  const normalized = (code || '').toString().trim();
-  if (!staffId || !normalized) {
-    res.status(400).json({ message: 'staffId and code are required' });
-    return;
-  }
-  const employee =
-    getEmployeeById(Number(staffId)) ||
-    db.prepare('SELECT * FROM employees WHERE staff_code = ?').get(staffId.toString());
-  if (!employee) {
-    res.status(403).json({ message: '员工不存在或未授权' });
-    return;
-  }
-  const coupon = db.prepare('SELECT * FROM coupons WHERE code = ?').get(normalized);
-  if (!coupon) {
-    res.status(404).json({ success: false, message: '未找到该核销码' });
-    return;
-  }
-  if (coupon.status === 'used') {
-    res.status(400).json({ success: false, message: '该优惠券已核销' });
-    return;
-  }
-  db.prepare(
-    "UPDATE coupons SET status = ?, used_at = datetime('now','+8 hours'), used_by_staff_id = ?, used_by_staff_name = ?, used_by_staff_phone = ? WHERE id = ?"
-  ).run('used', employee.id, employee.name, employee.phone, coupon.id);
-  if (coupon.template_base_id) {
-    db.prepare('UPDATE general_coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.template_base_id);
-  }
-  const updated = db.prepare('SELECT * FROM coupons WHERE id = ?').get(coupon.id);
-  res.json({ success: true, coupon: serializeCoupon(updated) });
 });
 
 function serializeCoupon(row, includePhone = false) {
